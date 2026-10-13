@@ -888,7 +888,7 @@ func begin_battle(request: BattleRequest, launch: bool = true) -> Dictionary:
 		"tile_id": _tile_under_player(),
 		"lighting_preset": area.lighting_preset() if area != null else "Day",
 		"environment_preset": String(area.terrain.environment_preset) if area != null and area.terrain != null else "Forest",
-		"weather": String(area.terrain.weather) if area != null and area.terrain != null else "clear",
+		"weather": area.weather_id_for(_state) if area != null else "clear",
 	}
 
 	# Autosave BEFORE the battle: quitting mid-battle resumes in front of the trainer.

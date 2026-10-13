@@ -2,7 +2,14 @@ extends GutTest
 
 ## EVOLUTION data layer (docs/design/EVOLUTION.md §3.2-3.4, task 1.1/1.2): the graph queries
 ## and the content validator, proven over FIXTURE edges and characters built in code (never
-## broken files on disk), plus the gates over the shipped content (Barkling -> Oakheart).
+## broken files on disk), plus the gates over the shipped content (the six level / Sunstone lines).
+
+## The shipped edges (game/characters/evolutions/): five level-16 lines (story mode only) plus
+## Barkling's Sunstone branch into Cinderbark.
+const SHIPPED_EDGES: Array[StringName] = [
+	&"aquaoct__supaoctto", &"eye_totem__ember_eye", &"lava_komodo__magmoo",
+	&"seedant__vineweave", &"soot_puff__shadowbun", &"tree_grunt__ember_stump",
+]
 
 
 # --- Fixtures -----------------------------------------------------------------
@@ -143,32 +150,69 @@ func test_shipped_content_validates_clean() -> void:
 	assert_eq(EvolutionLibrary.validate(), [] as Array[String], "every shipped evolution edge is sound")
 
 
-func test_barkling_evolves_into_oakheart() -> void:
+func test_the_shipped_lines_are_exactly_the_six_edges() -> void:
 	EvolutionLibrary.rescan()
-	var edge := EvolutionLibrary.get_edge(&"tree_grunt__oakheart")
-	assert_not_null(edge, "the slice edge ships")
+	var ids: Array[StringName] = []
+	for e in EvolutionLibrary.all():
+		ids.append(e.id)
+	ids.sort()
+	var want: Array[StringName] = SHIPPED_EDGES.duplicate()
+	want.sort()
+	assert_eq(ids, want, "the shipped edges are the five level lines plus Barkling's Sunstone branch")
+
+
+func test_barkling_evolves_into_cinderbark_with_the_sunstone() -> void:
+	EvolutionLibrary.rescan()
+	var edge := EvolutionLibrary.get_edge(&"tree_grunt__ember_stump")
+	assert_not_null(edge, "Barkling's fire branch ships")
+	if edge == null:
+		return
 	assert_eq(edge.from_id, &"tree_grunt", "from Barkling")
-	assert_eq(edge.to_id, &"oakheart", "into Oakheart")
-	assert_eq(EvolutionLibrary.line_root(&"oakheart"), &"tree_grunt", "Oakheart's line root is Barkling")
-	assert_eq(EvolutionLibrary.stage_of(&"oakheart"), 2, "Oakheart is stage 2")
+	assert_eq(edge.to_id, &"ember_stump", "into Cinderbark")
+	assert_eq(EvolutionLibrary.line_root(&"ember_stump"), &"tree_grunt", "Cinderbark's line root is Barkling")
+	assert_eq(EvolutionLibrary.stage_of(&"ember_stump"), 2, "Cinderbark is stage 2")
 	assert_eq(EvolutionLibrary.stage_of(&"tree_grunt"), 1, "Barkling is stage 1")
-	assert_gt(edge.growth_goal(), 0, "the slice edge is earned through Growth")
+	assert_eq(edge.triggers.size(), 1, "one requirement")
+	var use := edge.triggers[0] as UseItemTrigger
+	assert_not_null(use, "the Sunstone is USED on it")
+	if use != null:
+		assert_eq(use.item_id, "sunstone", "the Sunstone")
+		assert_true(use.consume, "and spent")
+	assert_eq(edge.growth_goal(), 0, "no Growth goal: the stone alone does it")
 
 
-func test_oakheart_is_a_valid_one_word_unit_within_the_budget_ceiling() -> void:
-	var oak := CharacterLibrary.get_character(&"oakheart")
-	var bark := CharacterLibrary.get_character(&"tree_grunt")
-	assert_not_null(oak, "oakheart.tres is in the roster")
-	assert_true(bool(oak.validate()["valid"]), "Oakheart passes the character validator: %s" % str(oak.validate()["issues"]))
-	assert_false(" " in oak.display_name, "a non-boss unit name is one word (CONQUEST.md)")
-	assert_false(oak.is_boss, "Oakheart is a player unit, not a boss")
-	assert_eq(oak.get_footprint(), Vector2i.ONE, "Oakheart is 1x1")
-	assert_eq(oak.element, bark.element, "Oakheart keeps the nature element")
-	var ratio := float(oak.power_budget()) / float(bark.power_budget())
-	assert_true(ratio >= 1.0 and ratio <= EvolutionRules.current().max_budget_growth,
-		"the budget ratio %.2f is within [1, max_budget_growth]" % ratio)
-	assert_eq(oak.move_count(), 4, "evolving fills the empty ultimate slot")
-	assert_true(MoveResource.is_ultimate_move(oak.get_move(3), 3), "slot 3 (Timberfall) is the ultimate")
+func test_the_shipped_level_lines_trigger_at_level_16() -> void:
+	EvolutionLibrary.rescan()
+	for id in SHIPPED_EDGES:
+		if id == &"tree_grunt__ember_stump":
+			continue
+		var edge := EvolutionLibrary.get_edge(id)
+		assert_not_null(edge, "%s ships" % id)
+		if edge == null:
+			continue
+		assert_eq(edge.triggers.size(), 1, "%s has one requirement" % id)
+		var lv := edge.triggers[0] as LevelTrigger if edge.triggers.size() > 0 else null
+		assert_not_null(lv, "%s is a level trigger" % id)
+		if lv != null:
+			assert_eq(lv.level_required, 16, "%s evolves at level 16" % id)
+
+
+func test_every_shipped_evolved_form_is_a_valid_one_word_unit_within_the_budget_ceiling() -> void:
+	EvolutionLibrary.rescan()
+	for edge in EvolutionLibrary.all():
+		var to := CharacterLibrary.get_character(edge.to_id)
+		var from := CharacterLibrary.get_character(edge.from_id)
+		assert_not_null(to, "%s is in the roster" % edge.to_id)
+		assert_not_null(from, "%s is in the roster" % edge.from_id)
+		if to == null or from == null:
+			continue
+		assert_true(bool(to.validate()["valid"]), "%s passes the character validator: %s" % [
+			to.display_name, str(to.validate()["issues"])])
+		assert_false(" " in to.display_name, "%s: a non-boss unit name is one word (CONQUEST.md)" % to.display_name)
+		assert_false(to.is_boss, "%s is a player unit, not a boss" % to.display_name)
+		var ratio := float(to.power_budget()) / float(from.power_budget())
+		assert_true(ratio >= 1.0 and ratio <= EvolutionRules.current().max_budget_growth,
+			"%s -> %s: the budget ratio %.2f is within [1, max_budget_growth]" % [from.display_name, to.display_name, ratio])
 
 
 func test_rules_resource_ships_the_documented_defaults() -> void:

@@ -1,0 +1,145 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_mlpas"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartBattleCommand.gd" id="2_7gh4i"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="3_oj53k"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="4_owbkl"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="5_1q8ph"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="6_s3n3j"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="7_3v71n"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="8_keupk"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="9_gexsg"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="10_rskvg"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="11_eus6a"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="12_ll3ig"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="13_6xc7o"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/old_crypt_end/terrain.tres" id="14_cgowx"]
+
+[sub_resource type="Resource" id="Resource_ryc1b"]
+script = ExtResource("1_mlpas")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"crypt_lamp_4_1"
+cell = Vector3i(4, 1, 0)
+tint = Color(0.6, 0.86, 0.7, 1)
+
+[sub_resource type="Resource" id="Resource_o2g2e"]
+script = ExtResource("1_mlpas")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"crypt_lamp_9_1"
+cell = Vector3i(9, 1, 0)
+tint = Color(0.6, 0.86, 0.7, 1)
+
+[sub_resource type="Resource" id="Resource_q67y8"]
+script = ExtResource("3_oj53k")
+encounter_id = "postgame.crypt.boss"
+map_path = "res://game/overworld/content/battles/ow_crypt_depths.tres"
+squad_size = 4
+opponent_name = "Mortis"
+opponent_team = Array[Dictionary]([{
+"character_id": "necromancer",
+"strength": 1.0
+}, {
+"character_id": "monster",
+"strength": 1.0
+}, {
+"character_id": "petalfang",
+"strength": 1.0
+}, {
+"character_id": "blightcap",
+"strength": 1.0
+}])
+reward_flags = Array[String](["postgame.crypt_boss_beaten"])
+defeat_policy = 2
+clash_intro = true
+enemy_level = 42
+boss_battle = true
+
+[sub_resource type="Resource" id="Resource_tbwtf"]
+script = ExtResource("2_7gh4i")
+spec = SubResource("Resource_q67y8")
+
+[sub_resource type="Resource" id="Resource_vrs4g"]
+script = ExtResource("5_1q8ph")
+text = "The light gutters out, and the crypt falls silent."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_10w04"]
+script = ExtResource("6_s3n3j")
+beats = Array[Resource]([SubResource("Resource_vrs4g")])
+
+[sub_resource type="Resource" id="Resource_rlbit"]
+script = ExtResource("7_3v71n")
+
+[sub_resource type="Resource" id="Resource_fxnm2"]
+script = ExtResource("4_owbkl")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_10w04"), SubResource("Resource_rlbit")])
+
+[sub_resource type="Resource" id="Resource_tjdk4"]
+script = ExtResource("8_keupk")
+label = "Fight"
+commands = Array[Resource]([SubResource("Resource_tbwtf"), SubResource("Resource_fxnm2")])
+
+[sub_resource type="Resource" id="Resource_j1x7l"]
+script = ExtResource("8_keupk")
+label = "Not yet"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_qlf4b"]
+script = ExtResource("5_1q8ph")
+text = "Cold light gathers in the dark at the end of the crypt -- and something rises to meet you. Fight?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_6cp31"]
+script = ExtResource("9_gexsg")
+prompt = SubResource("Resource_qlf4b")
+options = Array[Resource]([SubResource("Resource_tjdk4"), SubResource("Resource_j1x7l")])
+
+[sub_resource type="Resource" id="Resource_p714p"]
+script = ExtResource("10_rskvg")
+speaker_name = "Mortis"
+id = &"crypt_boss"
+cell = Vector3i(6, 1, 0)
+display_name = "Mortis"
+visual_character = &"necromancer"
+visible_if = "not has(\"postgame.crypt_boss_beaten\")"
+on_interact = Array[Resource]([SubResource("Resource_6cp31")])
+
+[sub_resource type="Resource" id="Resource_uepm4"]
+script = ExtResource("11_eus6a")
+loot_items = Array[StringName]([&"dawnpetal_draught", &"dawnpetal_draught", &"bitterroot_salve"])
+loot_gold = 600
+id = &"crypt_chest"
+cell = Vector3i(8, 2, 0)
+display_name = "Chest"
+tint = Color(0.42, 0.3, 0.18, 1)
+visible_if = "has(\"postgame.crypt_boss_beaten\")"
+
+[sub_resource type="Resource" id="Resource_4iwy4"]
+script = ExtResource("12_ll3ig")
+area_rect = Rect2i(6, 7, 2, 1)
+target_area = &"old_crypt_depths"
+target_entry = &"north"
+id = &"south_exit"
+blocking = false
+
+[resource]
+script = ExtResource("13_6xc7o")
+area_id = &"old_crypt_end"
+display_name = "The Old Crypt"
+terrain = ExtResource("14_cgowx")
+kind = 3
+region_id = &"heartlands"
+world_map_pos = Vector2(0.448, 0.352)
+entry_points = {
+"south": {
+"cell": [6, 6, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_ryc1b"), SubResource("Resource_o2g2e"), SubResource("Resource_p714p"), SubResource("Resource_uepm4"), SubResource("Resource_4iwy4")])
+level_band = Vector2i(30, 40)

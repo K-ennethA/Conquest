@@ -30,13 +30,13 @@ class MockTarget:
 
 
 func _grass_cutter_caster() -> MockCaster:
-	return MockCaster.new({"damage_vs_element_nature": 0.5})
+	return MockCaster.new({"damage_vs_element_plant": 0.5})
 
 
 # --- Attacker element bonus --------------------------------------------------
 
 func test_element_bonus_boosts_matching_element_target():
-	var scale := DamageEffect.element_bonus_scale_for(_grass_cutter_caster(), MockTarget.new(&"nature"), null)
+	var scale := DamageEffect.element_bonus_scale_for(_grass_cutter_caster(), MockTarget.new(&"plant"), null)
 	assert_almost_eq(scale, 1.5, 0.001, "Grass Cutter deals +50% to a nature-element target")
 
 func test_element_bonus_ignores_other_elements():
@@ -48,11 +48,11 @@ func test_element_bonus_ignores_other_elements():
 
 func test_element_bonus_absent_without_the_passive():
 	var plain := MockCaster.new({})
-	assert_almost_eq(DamageEffect.element_bonus_scale_for(plain, MockTarget.new(&"nature"), null), 1.0, 0.001,
+	assert_almost_eq(DamageEffect.element_bonus_scale_for(plain, MockTarget.new(&"plant"), null), 1.0, 0.001,
 		"a caster without the passive gets no element bonus")
 
 func test_element_bonus_null_safe():
-	assert_almost_eq(DamageEffect.element_bonus_scale_for(null, MockTarget.new(&"nature"), null), 1.0, 0.001,
+	assert_almost_eq(DamageEffect.element_bonus_scale_for(null, MockTarget.new(&"plant"), null), 1.0, 0.001,
 		"null caster is a plain 1.0")
 
 

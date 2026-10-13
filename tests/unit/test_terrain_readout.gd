@@ -66,7 +66,7 @@ func test_a_stranger_in_tall_grass_wears_the_authored_bonus() -> void:
 func test_a_nature_unit_wears_the_ELEMENT_BOOSTED_number_not_the_authored_one() -> void:
 	# THE point of routing through TerrainStats. 15 x 1.25 = 18.75 -> 19, and that 19 is what
 	# an attacker's hit chance has to beat -- so 19 is what the chip must say.
-	var fixture: Dictionary = _stand(&"nature", [_tile(GRASS_TILE)])
+	var fixture: Dictionary = _stand(&"plant", [_tile(GRASS_TILE)])
 	var entries: Array = TerrainVisuals.bonuses_for(fixture["unit"], fixture["board"])
 	assert_eq(int(entries[0]["amount"]), 19,
 		"a nature unit reads its own nature grass better: +15 x 1.25 = +19")
@@ -80,7 +80,7 @@ func test_a_nature_unit_wears_the_ELEMENT_BOOSTED_number_not_the_authored_one() 
 func test_the_chip_number_is_what_the_hit_chance_has_to_beat() -> void:
 	# Stated as the rule rather than as a coincidence of two constants: whatever the chip
 	# says, a 100%-accuracy swing at this unit lands at exactly 100 minus it.
-	var fixture: Dictionary = _stand(&"nature", [_tile(GRASS_TILE)])
+	var fixture: Dictionary = _stand(&"plant", [_tile(GRASS_TILE)])
 	var entries: Array = TerrainVisuals.bonuses_for(fixture["unit"], fixture["board"])
 	var move := MoveResource.new()
 	move.accuracy = 1.0
@@ -105,9 +105,9 @@ func test_slippery_ice_reads_as_a_LOSS_and_is_tinted_for_one() -> void:
 
 
 func test_a_water_unit_keeps_its_feet_and_the_chip_says_so() -> void:
-	var entries: Array = _entries(&"water", [_tile(ICE_TILE)])
+	var entries: Array = _entries(&"ice", [_tile(ICE_TILE)])
 	assert_eq(int(entries[0]["amount"]), -9,
-		"a water unit on water ice loses 9, not 10 -- the at-home benefit")
+		"an ice unit on ice loses 9, not 10 -- the at-home benefit")
 	assert_eq(TerrainVisuals.chip_text(entries[0]), "±AVO-9", "and the chip quotes that")
 
 
@@ -149,7 +149,7 @@ func test_layers_that_cancel_exactly_produce_no_chip_at_all() -> void:
 
 func test_plain_ground_and_broken_units_produce_nothing() -> void:
 	var bare := Doubles.TileEffectBoard.new()
-	var unit := _ElementUnit.new(&"nature")
+	var unit := _ElementUnit.new(&"plant")
 	bare.place(unit, CELL)
 	assert_true(TerrainVisuals.bonuses_for(unit, bare).is_empty(),
 		"bare earth gives a unit nothing to wear")
@@ -163,7 +163,7 @@ func test_plain_ground_and_broken_units_produce_nothing() -> void:
 # ==============================================================================
 
 func test_the_tooltip_names_the_terrain_the_real_number_and_the_condition() -> void:
-	var entries: Array = _entries(&"nature", [_tile(GRASS_TILE)])
+	var entries: Array = _entries(&"plant", [_tile(GRASS_TILE)])
 	var tip: String = TerrainVisuals.tooltip_for(entries[0])
 	gut.p("tooltip     : %s" % tip)
 	assert_true(tip.contains("Tall Grass"), "it names the tile: %s" % tip)

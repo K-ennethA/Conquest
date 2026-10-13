@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="EvolutionResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/evolution/EvolutionResource.gd" id="1_evo"]
+[ext_resource type="Script" path="res://game/characters/evolution/EvolutionTrigger.gd" id="2_trig"]
+[ext_resource type="Script" path="res://game/characters/evolution/LevelTrigger.gd" id="3_level"]
+
+[sub_resource type="Resource" id="Resource_level0"]
+script = ExtResource("3_level")
+level_required = 16
+
+[resource]
+script = ExtResource("1_evo")
+id = &"lava_komodo__magmoo"
+from_id = &"lava_komodo"
+to_id = &"magmoo"
+flavor = ""
+triggers = Array[ExtResource("2_trig")]([SubResource("Resource_level0")])

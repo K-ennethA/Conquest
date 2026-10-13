@@ -7,6 +7,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"varden"
+element = &"basic"
 kind = 1
 display_name = "General Varden"
 description = "PLACEHOLDER -- a HUMAN battle unit: fights with his sword (weapon attack); no special moves or abilities yet. Default stats cloned from Geode pending rebalance."

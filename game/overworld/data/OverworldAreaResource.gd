@@ -35,6 +35,15 @@ enum Kind { TOWN, ROUTE, INTERIOR, DUNGEON }
 ## its wild creatures roll ([member EncounterZone.level_band] may narrow it per zone), what a
 ## SCALED chief clamps into and what a LEGEND is authored above. (0, 0) = unset (no levels).
 @export var level_band: Vector2i = Vector2i.ZERO
+## STORY-DRIVEN WEATHER: while [member weather_if] holds, the area shows [member weather_alt] (a
+## [WeatherResource] id) instead of its terrain's -- on the overworld and in its battles (e.g. the Snowy
+## Peaks under a BLIZZARD in the post-game, DECISIONS.md #99). Blank = never.
+## SLIDE TILES: stepping onto one, the hero keeps sliding the way he moved until something stops him
+## (a rock, a wall, ground that is not slippery, a hole) -- the ice dungeon's puzzle (DECISIONS.md #102).
+## Area-scoped, so ice elsewhere (Frostpeak's pond) stays walkable ground.
+@export var slide_tiles: Array[StringName] = []
+@export var weather_alt: String = ""
+@export var weather_if: String = ""
 
 
 func is_interior() -> bool:
@@ -65,6 +74,15 @@ func weather_id() -> String:
 	if terrain != null and not String(terrain.weather).is_empty():
 		return String(terrain.weather)
 	return "clear"
+
+
+## The weather this area shows under [param state]: [member weather_alt] while [member weather_if]
+## holds, else the terrain's ([method weather_id]).
+func weather_id_for(state: StoryState) -> String:
+	if not weather_alt.is_empty() and not weather_if.strip_edges().is_empty() \
+			and ConditionContext.evaluate(weather_if, state):
+		return weather_alt
+	return weather_id()
 
 
 func lighting_preset() -> String:
@@ -175,6 +193,9 @@ func validate() -> Array[String]:
 	for i in range(zones().size()):
 		zones()[i].validate(issues, "%s/zone%d" % [aid, i])
 	StoryCommand.validate_list(on_enter, issues, "%s/on_enter" % aid)
+	StoryCommand.check_condition(weather_if, issues, "%s weather_if" % aid)
+	if not weather_alt.is_empty() and not Weather.has_weather(weather_alt):
+		issues.append("%s: weather '%s' does not exist" % [aid, weather_alt])
 	return issues
 
 

@@ -99,7 +99,9 @@ func test_guards_only_under_threat() -> void:
 
 
 func test_easy_is_reproducible_from_its_seed() -> void:
-	var b := _battle()
+	# Petalfang's kit scores close together, so the softmax really spreads. (Vineweave's ultimate now
+	# out-scores the rest of its kit so far that EASY rightly picks it almost every time.)
+	var b := _battle(&"petalfang", &"gem_knight")
 	var vw = b.unit_of(0)
 	var geode = b.unit_of(1)
 	var picks: Array = []

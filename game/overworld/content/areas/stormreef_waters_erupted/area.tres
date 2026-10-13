@@ -1,0 +1,146 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="1_ohx70"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="2_enaqs"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_1gon5"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_3cd31"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="5_og585"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="6_2pw2c"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/stormreef_waters_erupted/terrain.tres" id="7_vocpy"]
+
+[sub_resource type="Resource" id="Resource_mcebl"]
+script = ExtResource("1_ohx70")
+area_rect = Rect2i(11, 0, 4, 1)
+target_area = &"beach_village"
+target_entry = &"sea_route"
+id = &"north_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_p6roa"]
+script = ExtResource("2_enaqs")
+prop = "whirlpool"
+footprint = Vector2i(1, 1)
+id = &"tides_whirlpool_swirl"
+cell = Vector3i(24, 9, 0)
+tint = Color(0.7, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Resource_tcel7"]
+script = ExtResource("1_ohx70")
+area_rect = Rect2i(24, 9, 1, 1)
+target_area = &"island_of_tides"
+target_entry = &"whirlpool"
+id = &"tides_whirlpool"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_f44tx"]
+script = ExtResource("3_1gon5")
+text = "STORMREEF ISLE"
+id = &"isle_sign"
+cell = Vector3i(14, 18, 0)
+display_name = "Stormreef Isle"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_wi55w"]
+script = ExtResource("4_3cd31")
+text = "Stormreef Isle's cliffs rise straight from the reef here. There is no way up -- not yet."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_v6dhm"]
+script = ExtResource("5_og585")
+scene_id = &"stormreef_isle_road_locked_isle_landing"
+beats = Array[Resource]([SubResource("Resource_wi55w")])
+
+[sub_resource type="Resource" id="Resource_22723"]
+script = ExtResource("1_ohx70")
+area_rect = Rect2i(0, 19, 26, 1)
+target_area = &"stormreef_waters_erupted"
+target_entry = &"shore"
+requires = "has(\"world.sea_routes_open\")"
+locked_scene = SubResource("Resource_v6dhm")
+id = &"isle_landing"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_dasq4"]
+script = ExtResource("2_enaqs")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"lava_fire_15_7"
+cell = Vector3i(15, 7, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_1kpam"]
+script = ExtResource("2_enaqs")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"lava_fire_19_9"
+cell = Vector3i(19, 9, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_hxmuv"]
+script = ExtResource("2_enaqs")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"lava_fire_16_10"
+cell = Vector3i(16, 10, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_g5p3t"]
+script = ExtResource("2_enaqs")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"lava_fire_19_6"
+cell = Vector3i(19, 6, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_l6lps"]
+script = ExtResource("2_enaqs")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"lava_rock_14_9"
+cell = Vector3i(14, 9, 0)
+tint = Color(0.16, 0.13, 0.14, 1)
+
+[sub_resource type="Resource" id="Resource_382eh"]
+script = ExtResource("2_enaqs")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"lava_rock_20_11"
+cell = Vector3i(20, 11, 0)
+tint = Color(0.16, 0.13, 0.14, 1)
+
+[sub_resource type="Resource" id="Resource_7twu2"]
+script = ExtResource("1_ohx70")
+area_rect = Rect2i(17, 11, 1, 1)
+target_area = &"volcano_path"
+target_entry = &"south"
+id = &"volcano_path"
+blocking = false
+
+[resource]
+script = ExtResource("6_2pw2c")
+area_id = &"stormreef_waters_erupted"
+display_name = "Stormreef Waters"
+terrain = ExtResource("7_vocpy")
+kind = 1
+region_id = &"open_ocean"
+world_map_pos = Vector2(0.645, 0.8)
+entry_points = {
+"east": {
+"cell": [23, 9, 0],
+"facing": "west"
+},
+"north": {
+"cell": [12, 1, 0],
+"facing": "south"
+},
+"shore": {
+"cell": [12, 18, 0],
+"facing": "east"
+},
+"volcano_door": {
+"cell": [17, 12, 0],
+"facing": "west"
+}
+}
+entities = Array[Resource]([SubResource("Resource_mcebl"), SubResource("Resource_p6roa"), SubResource("Resource_tcel7"), SubResource("Resource_f44tx"), SubResource("Resource_22723"), SubResource("Resource_dasq4"), SubResource("Resource_1kpam"), SubResource("Resource_hxmuv"), SubResource("Resource_g5p3t"), SubResource("Resource_l6lps"), SubResource("Resource_382eh"), SubResource("Resource_7twu2")])
+level_band = Vector2i(12, 20)

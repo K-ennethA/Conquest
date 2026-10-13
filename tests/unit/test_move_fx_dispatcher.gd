@@ -197,19 +197,19 @@ func test_an_alpha_zero_colour_means_not_authored() -> void:
 
 
 func test_a_move_with_no_override_is_untouched() -> void:
-	var move := _move(_pattern(CombatTypes.AreaShape.SINGLE, 0), &"nature")
+	var move := _move(_pattern(CombatTypes.AreaShape.SINGLE, 0), &"plant")
 	assert_null(move.fx, "fx defaults to null -- every move authored before this field is unaffected")
-	assert_eq(_fx._move_spec(move, 0)["color"], ConquestTheme.element_color("nature"),
+	assert_eq(_fx._move_spec(move, 0)["color"], ConquestTheme.element_color("plant"),
 		"and resolves purely from its element")
 
 
 func test_a_non_fx_resource_in_the_slot_is_ignored_rather_than_trusted() -> void:
-	var move := _move(_pattern(CombatTypes.AreaShape.SINGLE, 0), &"holy")
+	var move := _move(_pattern(CombatTypes.AreaShape.SINGLE, 0), &"radiant")
 	move.fx = TargetingPattern.new()  # a Resource, but not an FX one
 	var spec: Dictionary = _fx._move_spec(move, 0)
 	assert_eq(spec["burst_scale"], 1.0,
 		"a resource with none of the FX fields contributes nothing -- the defaults stand")
-	assert_eq(spec["color"], ConquestTheme.element_color("holy"),
+	assert_eq(spec["color"], ConquestTheme.element_color("radiant"),
 		"and the element tint is unchanged")
 
 
@@ -223,7 +223,7 @@ func test_abyssal_maw_carries_the_worked_override() -> void:
 	assert_not_null(move.fx, "the maw is the authored example of the override path")
 
 	var spec: Dictionary = _fx._move_spec(move, 0)
-	var default_spec: Dictionary = _fx._move_spec(_move(_pattern(CombatTypes.AreaShape.SQUARE, 1), &"dark"), 0)
+	var default_spec: Dictionary = _fx._move_spec(_move(_pattern(CombatTypes.AreaShape.SQUARE, 1), &"grim"), 0)
 	assert_gt(float(spec["burst_scale"]), float(default_spec["burst_scale"]),
 		"the maw bursts bigger than an unauthored dark move")
 	assert_gt(float(spec["shake"]), 0.0, "and kicks the camera, which a default move does not")
@@ -257,8 +257,8 @@ func test_a_detonation_gets_a_bigger_burst_and_a_kick_than_a_sweep() -> void:
 func test_a_hazard_is_tinted_by_the_element_it_was_cast_with() -> void:
 	var maw := DelayedBurstHazard.new([Vector3i(0, 0, 0)] as Array[Vector3i], 10,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, null)
-	maw.element = &"dark"
-	assert_eq(_fx._hazard_spec(maw, true)["color"], ConquestTheme.element_color("dark"),
+	maw.element = &"grim"
+	assert_eq(_fx._hazard_spec(maw, true)["color"], ConquestTheme.element_color("grim"),
 		"an eruption reads in the element of the move that opened it, from the same lookup")
 
 

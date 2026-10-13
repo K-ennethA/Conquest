@@ -156,9 +156,9 @@ func _assert_badge_reads(badge: PanelContainer, expected: String, where: String)
 
 func test_the_live_card_badges_the_selected_units_element() -> void:
 	var layout: Control = await _build_hud()
-	await _select(_unit(&"nature"))
+	await _select(_unit(&"plant"))
 
-	_assert_badge_reads(_badge_in(layout.unit_info_panel), "Nature", "the battle card")
+	_assert_badge_reads(_badge_in(layout.unit_info_panel), "Plant", "the battle card")
 
 
 func test_the_cards_badge_is_the_colour_the_moves_stripe_with() -> void:
@@ -197,8 +197,8 @@ func test_the_badge_follows_the_selection_from_one_element_to_another() -> void:
 	await _select(_unit(&"fire"))
 	_assert_badge_reads(_badge_in(layout.unit_info_panel), "Fire", "the battle card")
 
-	await _select(_unit(&"holy"))
-	_assert_badge_reads(_badge_in(layout.unit_info_panel), "Holy", "the re-pointed card")
+	await _select(_unit(&"radiant"))
+	_assert_badge_reads(_badge_in(layout.unit_info_panel), "Radiant", "the re-pointed card")
 
 	await _select(_unit(&""))
 	assert_false(_badge_in(layout.unit_info_panel).visible,
@@ -210,7 +210,7 @@ func test_the_badge_costs_the_pinned_card_no_height_and_no_width() -> void:
 	# against that constant. A badge that pushed the card past it would silently overlap
 	# the terrain card in the corner below.
 	var layout: Control = await _build_hud()
-	await _select(_unit(&"nature"))
+	await _select(_unit(&"plant"))
 
 	var card = layout.unit_info_panel
 	var card_rect: Rect2 = _rect_of(card)
@@ -236,7 +236,7 @@ func test_the_badge_costs_the_pinned_card_no_height_and_no_width() -> void:
 
 func test_the_badge_never_squeezes_the_name_off_the_card() -> void:
 	var layout: Control = await _build_hud()
-	await _select(_unit(&"nature"))
+	await _select(_unit(&"plant"))
 
 	var card = layout.unit_info_panel
 	var name_label: Label = card.unit_name_label
@@ -255,7 +255,7 @@ func test_the_badge_never_squeezes_the_name_off_the_card() -> void:
 
 func test_the_open_detail_page_badges_the_element_in_its_header() -> void:
 	var layout: Control = await _build_hud()
-	await _select(_unit(&"nature"))
+	await _select(_unit(&"plant"))
 	layout.unit_info_panel.open_details()
 	for i in range(6):
 		await get_tree().process_frame
@@ -265,7 +265,7 @@ func test_the_open_detail_page_badges_the_element_in_its_header() -> void:
 	assert_not_null(header, "the page has an identity header")
 	if header == null:
 		return
-	_assert_badge_reads(_badge_in(header), "Nature", "the detail header")
+	_assert_badge_reads(_badge_in(header), "Plant", "the detail header")
 	page.close()
 
 
@@ -273,7 +273,7 @@ func test_the_header_badge_does_not_steal_the_pages_scroll_region() -> void:
 	# The page's failure mode is a body allotted no height. The header growing would take
 	# that height straight out of the scroll region, so the budget is asserted, not hoped.
 	var layout: Control = await _build_hud()
-	await _select(_unit(&"nature"))
+	await _select(_unit(&"plant"))
 	layout.unit_info_panel.open_details()
 	for i in range(6):
 		await get_tree().process_frame
@@ -323,7 +323,7 @@ func _forecast_of(layout: Control) -> CombatForecastPanel:
 func _aim(layout: Control, extra: Dictionary) -> CombatForecastPanel:
 	var panel: CombatForecastPanel = _forecast_of(layout)
 	panel.set_preview_source(_stub_preview(extra))
-	panel.show_forecast(_unit(&"fire"), _unit(&"nature"), _damaging_move(&"fire"))
+	panel.show_forecast(_unit(&"fire"), _unit(&"plant"), _damaging_move(&"fire"))
 	for i in range(4):
 		await get_tree().process_frame
 	return panel
@@ -454,7 +454,7 @@ func test_a_healing_move_gets_neither_breakdown_row() -> void:
 	var heal := MoveResource.new()
 	heal.move_id = &"mend"
 	heal.display_name = "Mend"
-	panel.show_forecast(_unit(&"fire"), _unit(&"nature"), heal)
+	panel.show_forecast(_unit(&"fire"), _unit(&"plant"), heal)
 	for i in range(4):
 		await get_tree().process_frame
 
@@ -492,13 +492,13 @@ func _hover_panel() -> Control:
 
 func test_the_hover_card_badges_the_element_on_its_existing_hp_row() -> void:
 	var panel: Control = _hover_panel()
-	var unit := StubUnit.new(&"nature")
+	var unit := StubUnit.new(&"plant")
 	add_child_autofree(unit)
 	panel.show_for_unit(unit)
 	for i in range(4):
 		await get_tree().process_frame
 
-	_assert_badge_reads(_badge_in(panel), "Nature", "the hover card")
+	_assert_badge_reads(_badge_in(panel), "Plant", "the hover card")
 	var hp_row := panel.find_child("HPRow", true, false) as Control
 	assert_not_null(hp_row, "the badge rides the HP row that was already there")
 	if hp_row != null:
@@ -512,7 +512,7 @@ func test_the_hover_chip_does_not_grow_the_card() -> void:
 	# has to mean the measured height is unchanged, not that it looks about right.
 	var panel: Control = _hover_panel()
 	var plain := StubUnit.new(&"")
-	var elemented := StubUnit.new(&"nature")
+	var elemented := StubUnit.new(&"plant")
 	add_child_autofree(plain)
 	add_child_autofree(elemented)
 

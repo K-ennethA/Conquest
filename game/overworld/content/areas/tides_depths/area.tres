@@ -1,0 +1,142 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_7dd7e"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_tpkhm"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/BondLegendCommand.gd" id="3_8jpn4"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="4_hkxln"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="5_o008m"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="6_jtbn2"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="7_f5jvp"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="8_0oxq0"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="9_3tlyi"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartBattleCommand.gd" id="10_w8qoe"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="11_mspkm"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="12_lbxab"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="13_1sbr2"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/tides_depths/terrain.tres" id="14_xfe0u"]
+
+[sub_resource type="Resource" id="Resource_tysjk"]
+script = ExtResource("1_7dd7e")
+prop = "hole"
+footprint = Vector2i(1, 1)
+id = &"hole_up_pit"
+cell = Vector3i(9, 9, 0)
+tint = Color(0.5, 0.56, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_jbn0d"]
+script = ExtResource("2_tpkhm")
+area_rect = Rect2i(9, 9, 1, 1)
+target_area = &"tides_cave_3"
+target_entry = &"east"
+arrival_toast = "The hole leads back up -- you climb out where you started."
+id = &"hole_up"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_ohja0"]
+script = ExtResource("3_8jpn4")
+character_id = &"vineweave"
+
+[sub_resource type="Resource" id="Resource_vcumk"]
+script = ExtResource("4_hkxln")
+key = "legend.tides.bonded"
+
+[sub_resource type="Resource" id="Resource_hc6qb"]
+script = ExtResource("5_o008m")
+
+[sub_resource type="Resource" id="Resource_s2voi"]
+script = ExtResource("6_jtbn2")
+label = "Bond"
+commands = Array[Resource]([SubResource("Resource_ohja0"), SubResource("Resource_vcumk"), SubResource("Resource_hc6qb")])
+
+[sub_resource type="Resource" id="Resource_g2gsi"]
+script = ExtResource("6_jtbn2")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_v3f3b"]
+script = ExtResource("7_f5jvp")
+text = "Vineweave watches you, still. Bond with it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_wvtia"]
+script = ExtResource("8_0oxq0")
+prompt = SubResource("Resource_v3f3b")
+options = Array[Resource]([SubResource("Resource_s2voi"), SubResource("Resource_g2gsi")])
+
+[sub_resource type="Resource" id="Resource_8l1pl"]
+script = ExtResource("11_mspkm")
+encounter_id = "tides.legend"
+map_path = "res://game/overworld/content/battles/ow_tides_depths.tres"
+squad_size = 4
+opponent_name = "Vineweave"
+opponent_team = Array[Dictionary]([{
+"character_id": "vineweave",
+"strength": 1.0
+}])
+reward_flags = Array[String](["tides.legend_beaten"])
+defeat_policy = 2
+clash_intro = true
+enemy_level = 25
+boss_battle = true
+
+[sub_resource type="Resource" id="Resource_58ly1"]
+script = ExtResource("10_w8qoe")
+spec = SubResource("Resource_8l1pl")
+
+[sub_resource type="Resource" id="Resource_7c8bm"]
+script = ExtResource("9_3tlyi")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_wvtia")])
+
+[sub_resource type="Resource" id="Resource_lixbm"]
+script = ExtResource("6_jtbn2")
+label = "Face it"
+commands = Array[Resource]([SubResource("Resource_58ly1"), SubResource("Resource_7c8bm")])
+
+[sub_resource type="Resource" id="Resource_1l4j0"]
+script = ExtResource("6_jtbn2")
+label = "Not yet"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_32eok"]
+script = ExtResource("7_f5jvp")
+text = "The water of the deep lake rises and turns, and something old rises with it. Face it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_hmo3s"]
+script = ExtResource("8_0oxq0")
+prompt = SubResource("Resource_32eok")
+options = Array[Resource]([SubResource("Resource_lixbm"), SubResource("Resource_1l4j0")])
+
+[sub_resource type="Resource" id="Resource_hrtya"]
+script = ExtResource("9_3tlyi")
+condition = "not has(\"tides.legend_beaten\")"
+then_commands = Array[Resource]([SubResource("Resource_hmo3s")])
+else_commands = Array[Resource]([SubResource("Resource_wvtia")])
+
+[sub_resource type="Resource" id="Resource_2cskm"]
+script = ExtResource("12_lbxab")
+speaker_name = "Vineweave"
+id = &"tides_legend"
+cell = Vector3i(8, 1, 0)
+display_name = "Vineweave"
+visual_character = &"vineweave"
+visible_if = "not has(\"legend.tides.bonded\")"
+on_interact = Array[Resource]([SubResource("Resource_hrtya")])
+
+[resource]
+script = ExtResource("13_1sbr2")
+area_id = &"tides_depths"
+display_name = "Depths of the Tides"
+terrain = ExtResource("14_xfe0u")
+kind = 3
+region_id = &"open_ocean"
+world_map_pos = Vector2(0.85, 0.81)
+entry_points = {
+"whirl": {
+"cell": [8, 10, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_tysjk"), SubResource("Resource_jbn0d"), SubResource("Resource_2cskm")])
+level_band = Vector2i(12, 20)

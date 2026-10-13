@@ -522,8 +522,8 @@ beats = Array[Resource]([SubResource("Resource_0jvki")])
 [sub_resource type="Resource" id="Resource_628w3"]
 script = ExtResource("13_ny8je")
 area_rect = Rect2i(17, 0, 1, 1)
-target_area = &"woodland_town"
-target_entry = &"north_trail"
+target_area = &"frostpeak_village"
+target_entry = &"south_trail"
 requires = "has(\"world.frostpeak_open\")"
 locked_scene = SubResource("Resource_0uvg0")
 id = &"north_exit"
@@ -638,6 +638,15 @@ script = ExtResource("4_n63fb")
 condition = "not has(\"woodland.arrived\")"
 then_commands = Array[Resource]([SubResource("Resource_rotus")])
 
+[sub_resource type="Resource" id="Resource_lgx05"]
+script = ExtResource("7_2rb6d")
+key = "world.frostpeak_open"
+
+[sub_resource type="Resource" id="Resource_44frk"]
+script = ExtResource("4_n63fb")
+condition = "(has(\"opening.complete\")) and not has(\"world.frostpeak_open\")"
+then_commands = Array[Resource]([SubResource("Resource_lgx05")])
+
 [resource]
 script = ExtResource("16_7y4ia")
 area_id = &"woodland_town"
@@ -684,5 +693,5 @@ entry_points = {
 }
 }
 entities = Array[Resource]([SubResource("Resource_jfxso"), SubResource("Resource_kvu8g"), SubResource("Resource_bh2qa"), SubResource("Resource_yqa1r"), SubResource("Resource_b76f3"), SubResource("Resource_pehgx"), SubResource("Resource_oeal2"), SubResource("Resource_xt4m5"), SubResource("Resource_c6xwg"), SubResource("Resource_5ktu5"), SubResource("Resource_ih22u"), SubResource("Resource_hnhof"), SubResource("Resource_mo0v2"), SubResource("Resource_aapqm"), SubResource("Resource_1g1ld"), SubResource("Resource_7thhs"), SubResource("Resource_tg737"), SubResource("Resource_5mlgd"), SubResource("Resource_thqy0"), SubResource("Resource_gb8y8"), SubResource("Resource_eu2i4"), SubResource("Resource_anhhy"), SubResource("Resource_e6wty"), SubResource("Resource_50364"), SubResource("Resource_rljtt"), SubResource("Resource_i31na"), SubResource("Resource_6nloy"), SubResource("Resource_wdowa"), SubResource("Resource_r2i4f"), SubResource("Resource_o7ttn"), SubResource("Resource_m2cea"), SubResource("Resource_2j6rj"), SubResource("Resource_crl2q"), SubResource("Resource_7uahq"), SubResource("Resource_b8d28"), SubResource("Resource_2j0bs"), SubResource("Resource_tg31k"), SubResource("Resource_82v5q"), SubResource("Resource_1oel7"), SubResource("Resource_4k0m1"), SubResource("Resource_pvh64"), SubResource("Resource_dq76t"), SubResource("Resource_8sndg"), SubResource("Resource_c1l3h"), SubResource("Resource_njdvs"), SubResource("Resource_p7kdo"), SubResource("Resource_pg7r4"), SubResource("Resource_a0ffa"), SubResource("Resource_lmnu4"), SubResource("Resource_pv2gf"), SubResource("Resource_htpel"), SubResource("Resource_ccc16"), SubResource("Resource_628w3"), SubResource("Resource_ocvp3"), SubResource("Resource_8c8hl"), SubResource("Resource_hg154"), SubResource("Resource_8tck5"), SubResource("Resource_35cwe"), SubResource("Resource_mr0bw"), SubResource("Resource_kq1jr")])
-on_enter = Array[Resource]([SubResource("Resource_3778o")])
+on_enter = Array[Resource]([SubResource("Resource_3778o"), SubResource("Resource_44frk")])
 level_band = Vector2i(8, 15)

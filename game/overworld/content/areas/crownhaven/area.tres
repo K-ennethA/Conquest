@@ -738,7 +738,7 @@ cell = Vector3i(7, 9, 0)
 display_name = "General Varden"
 visual_character = &"varden"
 tint = Color(0.2, 0.28, 0.5, 1)
-visible_if = "has(\"opening.complete\")"
+visible_if = "has(\"opening.complete\") and not (has(\"badlands.varden_arrived\") and not has(\"badlands.hideout_cleared\"))"
 on_interact = Array[Resource]([SubResource("Resource_0rj34")])
 
 [sub_resource type="Resource" id="Resource_rdnpl"]
@@ -1426,7 +1426,7 @@ encounter_id = "arena.crown_cup.champion_rematch"
 opponent_name = "Champion Isolde"
 opponent_speaker_id = &"npc_isolde"
 opponent_team = Array[Dictionary]([{
-"character_id": "oakheart",
+"character_id": "vineweave",
 "strength": 0.9
 }, {
 "character_id": "monster",
@@ -1711,8 +1711,8 @@ beats = Array[Resource]([SubResource("Resource_lqg36")])
 [sub_resource type="Resource" id="Resource_3d670"]
 script = ExtResource("20_wk0yi")
 area_rect = Rect2i(29, 13, 1, 1)
-target_area = &"crownhaven"
-target_entry = &"east_gate"
+target_area = &"rocky_badlands"
+target_entry = &"west_road"
 requires = "has(\"world.badlands_open\")"
 locked_scene = SubResource("Resource_m2jp3")
 id = &"east_exit"
@@ -1731,8 +1731,8 @@ beats = Array[Resource]([SubResource("Resource_dgkm8")])
 [sub_resource type="Resource" id="Resource_aidpt"]
 script = ExtResource("20_wk0yi")
 area_rect = Rect2i(29, 17, 1, 1)
-target_area = &"crownhaven"
-target_entry = &"harbour_gate"
+target_area = &"beach_village"
+target_entry = &"north_road"
 requires = "has(\"world.beach_road_open\")"
 locked_scene = SubResource("Resource_5dura")
 id = &"harbour_exit"
@@ -1819,6 +1819,24 @@ script = ExtResource("7_g17ua")
 condition = "not has(\"opening.arrived_crownhaven\")"
 then_commands = Array[Resource]([SubResource("Resource_1ihm4")])
 
+[sub_resource type="Resource" id="Resource_me8o4"]
+script = ExtResource("12_vdhnd")
+key = "world.beach_road_open"
+
+[sub_resource type="Resource" id="Resource_x6c4u"]
+script = ExtResource("7_g17ua")
+condition = "(has(\"opening.complete\")) and not has(\"world.beach_road_open\")"
+then_commands = Array[Resource]([SubResource("Resource_me8o4")])
+
+[sub_resource type="Resource" id="Resource_1auqt"]
+script = ExtResource("12_vdhnd")
+key = "world.badlands_open"
+
+[sub_resource type="Resource" id="Resource_pcjyu"]
+script = ExtResource("7_g17ua")
+condition = "(has(\"opening.complete\")) and not has(\"world.badlands_open\")"
+then_commands = Array[Resource]([SubResource("Resource_1auqt")])
+
 [resource]
 script = ExtResource("23_e6x5w")
 area_id = &"crownhaven"
@@ -1877,5 +1895,5 @@ entry_points = {
 }
 }
 entities = Array[Resource]([SubResource("Resource_pmyhw"), SubResource("Resource_r7vwj"), SubResource("Resource_hvivg"), SubResource("Resource_4vw77"), SubResource("Resource_sluii"), SubResource("Resource_5bjpv"), SubResource("Resource_vynvb"), SubResource("Resource_mw047"), SubResource("Resource_aytkr"), SubResource("Resource_aom58"), SubResource("Resource_hrxdu"), SubResource("Resource_fumqp"), SubResource("Resource_4dv0k"), SubResource("Resource_5c2oy"), SubResource("Resource_au5o3"), SubResource("Resource_2t4np"), SubResource("Resource_vcca4"), SubResource("Resource_2a5pe"), SubResource("Resource_1odni"), SubResource("Resource_7yydd"), SubResource("Resource_piajy"), SubResource("Resource_yj5in"), SubResource("Resource_316jc"), SubResource("Resource_seaa5"), SubResource("Resource_my8bd"), SubResource("Resource_lonke"), SubResource("Resource_yoa27"), SubResource("Resource_g1u3g"), SubResource("Resource_g7kgp"), SubResource("Resource_axbua"), SubResource("Resource_sm0ew"), SubResource("Resource_b4rx3"), SubResource("Resource_i7tb6"), SubResource("Resource_t8r0m"), SubResource("Resource_qrhty"), SubResource("Resource_w8agy"), SubResource("Resource_pv5bd"), SubResource("Resource_f04l0"), SubResource("Resource_63blu"), SubResource("Resource_e6rsp"), SubResource("Resource_di53f"), SubResource("Resource_2847x"), SubResource("Resource_l7jte"), SubResource("Resource_22p7q"), SubResource("Resource_357ha"), SubResource("Resource_6br1e"), SubResource("Resource_jjpvh"), SubResource("Resource_l80i7"), SubResource("Resource_clal2"), SubResource("Resource_o1vm1"), SubResource("Resource_ud2c0"), SubResource("Resource_4jbs8"), SubResource("Resource_sb7di"), SubResource("Resource_ggcae"), SubResource("Resource_wwts4"), SubResource("Resource_pmwuy"), SubResource("Resource_6gggv"), SubResource("Resource_copmq"), SubResource("Resource_xbgox"), SubResource("Resource_1c7ks"), SubResource("Resource_62qyy"), SubResource("Resource_xb7nu"), SubResource("Resource_tdb81"), SubResource("Resource_w5rbo"), SubResource("Resource_751mc"), SubResource("Resource_u4em2"), SubResource("Resource_11qh5"), SubResource("Resource_o8ogv"), SubResource("Resource_tev24"), SubResource("Resource_8yqf3"), SubResource("Resource_rdnpl"), SubResource("Resource_v5tpv"), SubResource("Resource_7i5op"), SubResource("Resource_emh7v"), SubResource("Resource_5wk2b"), SubResource("Resource_remfb"), SubResource("Resource_on1ni"), SubResource("Resource_aw8b8"), SubResource("Resource_q8p5x"), SubResource("Resource_6xbe1"), SubResource("Resource_4qfn1"), SubResource("Resource_rca6i"), SubResource("Resource_5th03"), SubResource("Resource_oakxd"), SubResource("Resource_3ldux"), SubResource("Resource_krr7l"), SubResource("Resource_d1uqq"), SubResource("Resource_nxfpy"), SubResource("Resource_3yh0v"), SubResource("Resource_pyrb1"), SubResource("Resource_8qtku"), SubResource("Resource_tvmc5"), SubResource("Resource_e75s3"), SubResource("Resource_bvh5s"), SubResource("Resource_6b13b"), SubResource("Resource_6i17k"), SubResource("Resource_17184"), SubResource("Resource_hwd5n"), SubResource("Resource_dn4nx"), SubResource("Resource_qnew0"), SubResource("Resource_5vkd0"), SubResource("Resource_swmxg"), SubResource("Resource_r7vec"), SubResource("Resource_jfbyk"), SubResource("Resource_3d670"), SubResource("Resource_aidpt"), SubResource("Resource_v1dx8"), SubResource("Resource_m66l0"), SubResource("Resource_f5x5x"), SubResource("Resource_qgo10"), SubResource("Resource_2ug14"), SubResource("Resource_ud0l8")])
-on_enter = Array[Resource]([SubResource("Resource_spx57")])
+on_enter = Array[Resource]([SubResource("Resource_spx57"), SubResource("Resource_x6c4u"), SubResource("Resource_pcjyu")])
 level_band = Vector2i(2, 8)

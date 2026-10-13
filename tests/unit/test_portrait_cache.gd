@@ -89,7 +89,7 @@ func test_stale_version_file_is_never_read() -> void:
 	# Write a PNG at a WRONG-version path (never what disk_path() computes for the current
 	# CACHE_VERSION) and confirm PortraitCache ignores it entirely.
 	var real_path: String = PortraitCache.disk_path(VERSION_GUARD_ID)
-	var stale_path: String = real_path.replace("v1_", "v0_")
+	var stale_path: String = real_path.replace(PortraitCache.CACHE_VERSION + "_", "v0_")
 	assert_ne(stale_path, real_path,
 		"the fixture must actually target a different filename than the current version")
 	_seed_png(stale_path, Color(0.9, 0.2, 0.2, 1.0))
@@ -99,7 +99,7 @@ func test_stale_version_file_is_never_read() -> void:
 
 	assert_eq(calls.size(), 1, "the callback still fires exactly once")
 	assert_null(calls[0],
-		"a stale-version file must never be picked up -- headless + unknown id + no v1 file = null")
+		"a stale-version file must never be picked up -- headless + unknown id + no current-version file = null")
 
 	_delete_absolute(stale_path)
 

@@ -119,15 +119,15 @@ func test_grass_cutter_is_authored_as_a_conditional_anti_element_bonus() -> void
 	assert_not_null(ability, "Vineweave's Grass Cutter ability resource loads")
 	assert_eq(ability.trigger, AbilityTrigger.Trigger.PASSIVE,
 		"Grass Cutter is a standing passive, not a triggered effect")
-	assert_true(ability.rule_modifiers.has("damage_vs_element_nature"),
+	assert_true(ability.rule_modifiers.has("damage_vs_element_plant"),
 		"it is keyed on the TARGET's element -- 'damage_vs_element_<elem>' -- which is "
 		+ "what makes it conditional on who is being hit rather than a flat aura")
-	assert_almost_eq(float(ability.rule_modifiers["damage_vs_element_nature"]), 0.5, 0.001,
+	assert_almost_eq(float(ability.rule_modifiers["damage_vs_element_plant"]), 0.5, 0.001,
 		"and it is authored at +50%, matching its own description")
 
 	var vineweave := load(VINEWEAVE_PATH) as CharacterResource
 	assert_not_null(vineweave, "the Vineweave roster entry loads")
-	assert_eq(vineweave.element, &"nature", "Vineweave is itself a nature unit")
+	assert_eq(vineweave.element, &"plant", "Vineweave is itself a nature unit")
 	var ids: Array = []
 	for a in vineweave.abilities:
 		if a != null:
@@ -224,7 +224,7 @@ func test_preview_matches_reality_with_a_resisted_matchup() -> void:
 
 	# nature move into a nature unit: Grass Cutter's +50% AND the chart's self-resist.
 	var forecast := _assert_preview_matches_reality(
-		caster, target, board, _strike(&"nature"),
+		caster, target, board, _strike(&"plant"),
 		"the ability bonus and the element matchup, stacked")
 
 	assert_almost_eq(float(forecast["element_mult"]), 0.75, 0.001,

@@ -121,7 +121,7 @@ func test_round_trip_victory() -> void:
 	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.set_location("mossway", Vector3i(19, 6, 0), "north")
-	s.member("vineweave").current_hp = 50
+	s.member("seedant").current_hp = 50
 	# The charm goes on Blightcap: an item can regenerate, which would blur the carried-HP check.
 	s.member("blightcap").item_id = "heartwood_charm"
 	var began: Dictionary = StoryController.begin_battle(_bram_request(), false)
@@ -136,7 +136,7 @@ func test_round_trip_victory() -> void:
 	var vine = null
 	var cap = null
 	for u in _party_units():
-		if String(u.get_meta(StoryBattleBridge.MEMBER_META)) == "vineweave":
+		if String(u.get_meta(StoryBattleBridge.MEMBER_META)) == "seedant":
 			vine = u
 		elif String(u.get_meta(StoryBattleBridge.MEMBER_META)) == "blightcap":
 			cap = u
@@ -172,7 +172,7 @@ func test_round_trip_victory() -> void:
 	assert_false(get_tree().paused, "the tree is unpaused")
 	assert_true(s.has_flag("trainer.mossway.bram.defeated"), "Bram's defeated flag")
 	assert_eq(s.gold, 100 + 120, "his purse")
-	assert_ne(s.member("vineweave").current_hp, StoryPartyMember.HP_FULL, "battle HP carried back")
+	assert_ne(s.member("seedant").current_hp, StoryPartyMember.HP_FULL, "battle HP carried back")
 	assert_eq(s.location_cell(), Vector3i(19, 6, 0), "the return point")
 	assert_null(StoryController.active_request(), "the battle is disarmed")
 	assert_false(bool(StoryController.report_battle_result(result)["success"]), "a late second report is refused")

@@ -5,7 +5,7 @@ extends GutTest
 ## plus whatever special moves it lists), the weapon triangle, and that creatures are untouched.
 
 ## Every roster entry and its kind. A new roster entry must be added here on purpose.
-const HUMANS: Array[String] = ["cael", "elias", "lyra", "varden", "wren"]
+const HUMANS: Array[String] = ["cael", "elias", "lyra", "necromancer", "shadow_assassin", "varden", "wren"]
 
 
 func after_each() -> void:
@@ -20,9 +20,8 @@ func test_every_roster_entry_has_the_expected_kind() -> void:
 			continue
 		var want_human: bool = HUMANS.has(String(id))
 		assert_eq(c.is_human(), want_human, "%s kind" % id)
-	# Mortis (necromancer) is a "gravecaller" but not clearly a person: kept CREATURE (noted in
-	# docs/design/HUMANS.md) until the owner says otherwise.
-	assert_false(CharacterLibrary.get_character(&"necromancer").is_human())
+	# Mortis (necromancer) and the Shadow Assassin are HUMANS (owner, 2026-10-12).
+	assert_true(CharacterLibrary.get_character(&"necromancer").is_human())
 
 
 func test_every_human_validates_and_wields_its_weapon() -> void:

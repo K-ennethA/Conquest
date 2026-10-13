@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/water/aquaoct_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"aquaoct"
+element = &"water"
+display_name = "Aquaoct"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Supaoctto pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-09 (compendium placeholder, 287ff9f / 6ba132b pattern; forge rigged/aquaoct.glb v1.1 @ cc72d3f): PLACEHOLDER FOR REBALANCE. Stats cloned from supaoctto.tres (Supaoctto, the other water octopus; element water); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): aquaoct_forge.glb.import root_scale 0.32572 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-09: around 3 ft = 0.9144 m) / the measured imported height (idle, first frame).
+base_health = 108
+base_attack = 27
+base_defense = 15
+base_magic = 8
+base_magic_defense = 11
+base_speed = 12
+base_movement = 5
+attack_range = 2
+model_scale = 0.50852

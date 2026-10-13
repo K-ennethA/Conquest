@@ -84,15 +84,16 @@ func test_warps_target_real_areas_and_entries() -> void:
 			if w is DoorEntity:
 				used = [(w as DoorEntity).front_cell()]
 			for c in used:
-				assert_true(OverworldGrid.build(a, StoryState.new()).is_terrain_passable(c),
-					"%s/%s: its cells can be walked onto" % [a.area_id, w.id])
+				assert_true(_walk_or_ride(a, c),
+					"%s/%s: its cells can be walked (or ridden) onto" % [a.area_id, w.id])
 
 
 func test_entries_and_actors_stand_on_walkable_ground() -> void:
 	for a in _areas():
 		var g := OverworldGrid.from_map(a.terrain)
 		for eid in a.entry_ids():
-			assert_true(g.is_terrain_passable(a.entry(eid)["cell"]), "%s entry '%s' is walkable" % [a.area_id, eid])
+			# An arrival by sea lands on the water, riding (DECISIONS.md #43).
+			assert_true(_walk_or_ride(a, a.entry(eid)["cell"]), "%s entry '%s' is walkable (or ridden)" % [a.area_id, eid])
 		for e in a.entity_list():
 			if e is NpcEntity or e is ChestEntity or e is SignEntity:
 				assert_true(g.is_terrain_passable(e.cell), "%s/%s stands on walkable ground" % [a.area_id, e.id])
@@ -421,12 +422,16 @@ func test_crownhaven_has_five_gates_on_the_world_map_roads() -> void:
 	for id in ["maribel", "veyra", "odalys", "garrick", "gate_warden"]:
 		assert_true(ch.entity(id) is NpcEntity, "%s lives in Crownhaven" % id)
 	var s := StoryFixture.past_opening(StoryState.new())
+	# Entering the city after the opening opens the coast and badlands roads (its on_enter; covered by
+	# test_regions_beyond.gd) -- as it has, by the time you stand at those gates.
+	for f in ["world.beach_road_open", "world.badlands_open"]:
+		s.set_flag(f, 1)
 	# [exit, target area, open after the opening, the map's direction]
 	for spec in [["south_exit", &"river_crossing", true, "south: River Crossing / Oakvale"],
 			["west_exit", &"sparse_forest", true, "west: the Sparse Forest / Woodland Town"],
 			["north_exit", &"crownhaven", false, "north: Mountain Base (closed)"],
-			["east_exit", &"crownhaven", false, "east: the Rocky Badlands (closed)"],
-			["harbour_exit", &"crownhaven", false, "south-east: Beach Village (closed)"]]:
+			["east_exit", &"rocky_badlands", true, "east: the Rocky Badlands"],
+			["harbour_exit", &"beach_village", true, "south-east: Beach Village"]]:
 		var w := ch.entity(spec[0]) as WarpEntity
 		assert_not_null(w, spec[3])
 		if w == null:
@@ -536,12 +541,10 @@ func test_the_future_roads_stay_closed_for_now() -> void:
 	var s := StoryFixture.past_opening(StoryState.new())
 	var atlas := WorldAtlas.load_default()
 	# [area, exit, the closed place it leads toward]
-	# (Woodland Town's west road to Deepwood Village is BUILT now -- test_deep_woods.gd covers it.)
-	for spec in [["woodland_town", "south_exit", "thieves_guild"],
-			["woodland_town", "north_exit", "frostpeak_village"], ["crownhaven", "north_exit", "mountain_base"],
-			["crownhaven", "east_exit", "redrock_village"], ["crownhaven", "harbour_exit", "beach_village"],
-			["river_crossing", "east_exit", "beach_village"], ["oakvale", "west_exit", "farm_hamlet"],
-			["oakvale_ruins", "west_exit", "farm_hamlet"]]:
+	# (Woodland Town's west road to Deepwood Village is BUILT now -- test_deep_woods.gd covers it -- and so
+	# are the roads to Frostpeak, the Rocky Badlands and Beach Village: test_regions_beyond.gd.)
+	for spec in [["woodland_town", "south_exit", "thieves_guild"], ["crownhaven", "north_exit", "mountain_base"],
+			["oakvale", "west_exit", "farm_hamlet"], ["oakvale_ruins", "west_exit", "farm_hamlet"]]:
 		var w := _area(spec[0]).entity(spec[1]) as WarpEntity
 		assert_not_null(w, "%s/%s exists" % [spec[0], spec[1]])
 		if w == null:
@@ -733,8 +736,11 @@ func test_the_three_towns_are_built_differently() -> void:
 # --- Everyone can be reached, whatever the story has done -------------------------------------
 
 ## The cells walkable from any entry of [param a] under [param s].
+## Every cell reachable from any entry -- over a TRAVEL field move's tiles too (the sea move: the
+## islet off Beach Village is reached riding, DECISIONS.md #43).
 func _reach(a: OverworldAreaResource, s: StoryState) -> Dictionary:
 	var g := OverworldGrid.build(a, s)
+	g.riding_tiles = _ride_tiles()
 	var reach: Dictionary = {}
 	var queue: Array[Vector3i] = []
 	for eid in a.entry_ids():
@@ -818,3 +824,20 @@ func test_arriving_in_the_ruins_always_tells_you_your_mother_died() -> void:
 				if beat != null and String(beat.speaker_id) == "npc_hessa" and beat.text.contains("She didn't come out"):
 					told = true
 	assert_true(told, "the ruins' arrival script has Hessa tell you")
+
+
+## Every shipped TRAVEL field move's tiles (riding them is a way round, DECISIONS.md #43).
+func _ride_tiles() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for fm in FieldMoveResource.travel_moves():
+		for t in fm.travel_tiles:
+			if not out.has(t):
+				out.append(t)
+	return out
+
+
+## [param c] of [param a] can be walked onto, or ridden onto with a travel move.
+func _walk_or_ride(a: OverworldAreaResource, c: Vector3i) -> bool:
+	var g := OverworldGrid.build(a, StoryState.new())
+	g.riding_tiles = _ride_tiles()
+	return g.is_terrain_passable(c)

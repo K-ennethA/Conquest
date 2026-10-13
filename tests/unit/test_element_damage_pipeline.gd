@@ -89,7 +89,7 @@ func _hp_lost(fight: Dictionary, move: MoveResource) -> int:
 
 
 func test_a_strong_matchup_takes_more_hp() -> void:
-	var fight := _fight(&"nature")
+	var fight := _fight(&"plant")
 	assert_eq(_hp_lost(fight, _elemental_move(&"fire", 20)), 25,
 		"fire into its opposite nature deals 20 x 1.25 = 25")
 
@@ -101,7 +101,7 @@ func test_a_resisted_matchup_takes_less_hp() -> void:
 
 
 func test_a_neutral_matchup_is_untouched() -> void:
-	var fight := _fight(&"holy")
+	var fight := _fight(&"radiant")
 	assert_eq(_hp_lost(fight, _elemental_move(&"fire", 20)), 20,
 		"fire and holy have no authored matchup, so the hit lands unscaled")
 
@@ -113,7 +113,7 @@ func test_an_unknown_element_is_neutral_in_the_live_path() -> void:
 
 
 func test_an_unelemented_move_is_unchanged() -> void:
-	var fight := _fight(&"nature")
+	var fight := _fight(&"plant")
 	assert_eq(_hp_lost(fight, _elemental_move(&"", 20)), 20,
 		"a move authored before elements existed still deals exactly its power")
 
@@ -128,7 +128,7 @@ func test_an_unelemented_target_is_unchanged() -> void:
 
 
 func test_the_multiplier_rounds_like_the_rest_of_the_damage_math() -> void:
-	assert_eq(_hp_lost(_fight(&"nature"), _elemental_move(&"fire", 13)), 16,
+	assert_eq(_hp_lost(_fight(&"plant"), _elemental_move(&"fire", 13)), 16,
 		"13 x 1.25 = 16.25 rounds to 16, the same round() every damage step uses")
 	assert_eq(_hp_lost(_fight(&"fire"), _elemental_move(&"fire", 13)), 10,
 		"13 x 0.75 = 9.75 rounds to 10")
@@ -143,7 +143,7 @@ func test_a_resisted_hit_never_falls_to_zero() -> void:
 
 
 func test_the_forecast_matches_what_the_move_actually_does() -> void:
-	for element in [&"nature", &"fire", &"holy", &"", &"plasma"]:
+	for element in [&"plant", &"fire", &"radiant", &"", &"plasma"]:
 		var fight := _fight(element)
 		var move := _elemental_move(&"fire", 17)
 		var forecast: Dictionary = MoveExecutor.preview_vs(
@@ -156,7 +156,7 @@ func test_the_forecast_matches_what_the_move_actually_does() -> void:
 
 
 func test_the_forecast_reports_the_matchup_it_applied() -> void:
-	var fight := _fight(&"nature")
+	var fight := _fight(&"plant")
 	var forecast: Dictionary = MoveExecutor.preview_vs(
 		_elemental_move(&"fire", 20), fight["caster"], fight["target"], fight["board"])
 	assert_almost_eq(float(forecast["element_mult"]), 1.25, 0.001,
@@ -176,7 +176,7 @@ func test_the_forecast_labels_a_resisted_matchup() -> void:
 
 
 func test_the_forecast_labels_a_neutral_matchup() -> void:
-	var fight := _fight(&"holy")
+	var fight := _fight(&"radiant")
 	var forecast: Dictionary = MoveExecutor.preview_vs(
 		_elemental_move(&"fire", 20), fight["caster"], fight["target"], fight["board"])
 	assert_eq(forecast["element_label"], ElementChart.LABEL_NEUTRAL,

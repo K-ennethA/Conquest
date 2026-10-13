@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/dark/shadowbun_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"shadowbun"
+element = &"grim"
+display_name = "Murkbun"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Vampito pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-09 (compendium placeholder, 287ff9f pattern; forge rigged/shadowbun.glb v1.2 @ 5ecd3af): PLACEHOLDER FOR REBALANCE. Stats cloned from vampito.tres (Vampito, the small dark critter; itself cloned from Undead); element dark (shadow family); moves, abilities, AI and movement kind are not designed yet. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): shadowbun_forge.glb.import root_scale 0.30213 normalises the glb to 1.80 m; model_scale = 1.801 m (forge size-table target; NO artist size yet, open question B4) / the measured imported height (idle, first frame).
+; owner 2026-10-12 evolution Lintuft -> Murkbun: PLACEHOLDER stats scaled so the evolved form is ~1.25x its base form's power budget (an evolution must not be weaker; content validator).
+base_health = 76
+base_attack = 30
+base_defense = 11
+base_magic = 0
+base_magic_defense = 8
+base_speed = 15
+base_movement = 4
+attack_range = 1
+model_scale = 1.00006

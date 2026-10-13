@@ -9,8 +9,9 @@ func test_mortis_resolves_with_full_kit():
 	assert_not_null(necro, "necromancer.tres resolves via CharacterLibrary")
 	if necro == null:
 		return
-	assert_eq(necro.element, &"dark", "Mortis is a dark-element caster")
-	assert_eq(necro.moveset.size(), 4, "Mortis has four moves")
+	assert_eq(necro.element, &"grim", "Mortis is a grim caster")
+	assert_eq(necro.moveset.size(), 3, "Mortis lists three special moves (a human: his staff strike is slot 0)")
+	assert_eq(necro.get_moveset().size(), 4, "so he fields four")
 	var ab: Array = necro.get("abilities")
 	assert_eq(ab.size(), 1, "Mortis has one ability (Reanimate)")
 

@@ -89,6 +89,23 @@ var _glide_dur: float = 0.0
 ## Seconds of the arrival frame left over past the cell centre; only non-zero during the
 ## arrival's walk_finished emit, where a chained walk_to consumes it.
 var _glide_carry: float = 0.0
+## RIDING (a travel field move, e.g. crossing the sea on a creature): the mount under the rider (a
+## child of the model, so it turns with him), its clips, and how far the rider is lifted onto it.
+## While mounted the MOUNT plays the walk / run clips and the rider idles.
+var _mount: Node3D = null
+var _mount_anim: AnimationPlayer = null
+var _rider_lift: float = 0.0
+## ASLEEP (Frostpeak's sleeping town): a drifting "z Z" over the head; LYING = flat on the back,
+## head north, raised onto a bed ([method set_asleep]).
+var _asleep: bool = false
+var _lying: bool = false
+var _zz: Label3D = null
+var _zz_tween: Tween = null
+
+## A lying sleeper's mattress height and the shift that centres a ~1.7 m body over a 1x2 bed whose
+## SOUTH cell is the actor's (the head lies in the cell to the north).
+const LIE_HEIGHT: float = 0.52
+const LIE_SHIFT_Z: float = -0.15
 
 
 func _ready() -> void:
@@ -152,7 +169,7 @@ func turn_to(dir: Vector2i) -> void:
 	if dir == Vector2i.ZERO or dir == facing:
 		return
 	facing = dir
-	if _model == null:
+	if _model == null or _lying:
 		return
 	if not _anims_on():
 		_apply_facing_now()
@@ -179,7 +196,7 @@ func face_cell(target: Vector3i) -> void:
 
 
 func _apply_facing_now() -> void:
-	if _model != null:
+	if _model != null and not _lying:
 		_model.rotation.y = UnitFacing.model_yaw(model_yaw_deg, facing)
 
 
@@ -261,6 +278,10 @@ func free_pose(pos: Vector3, heading: float, velocity: Vector3, facing_dir: Vect
 	var s: float = Vector2(velocity.x, velocity.z).length()
 	if s < HeroMover.REST_SPEED:
 		settle()
+		return
+	if _mount != null:
+		# Riding: the mount walks (play_clip routes it), the rider sits still.
+		play_clip(CLIP_WALK)
 		return
 	var base: String = CLIP_RUN if s > run_clip_above_mps else CLIP_WALK
 	if not play_clip(base, CLIP_WALK) or _anim == null:
@@ -353,6 +374,11 @@ func bubble_visible() -> bool:
 ## per-cell walk_to never restarts or re-blends the cycle. Not gated on the animations switch
 ## (see the class doc).
 func play_clip(base: String, fallback: String = "") -> bool:
+	if _mount_anim != null:
+		# Riding: the mount takes the locomotion clip; the rider sits idle on its back.
+		_play_on(_mount_anim, base, fallback)
+		base = CLIP_IDLE
+		fallback = ""
 	if _anim == null:
 		return false
 	var clip: String = _find_clip(base)
@@ -366,6 +392,134 @@ func play_clip(base: String, fallback: String = "") -> bool:
 		return true
 	_anim.play(clip, CLIP_BLEND, clip_rate(resolved))
 	return true
+
+
+## [method play_clip] on another player (the mount's), at 1.0x.
+static func _play_on(anim: AnimationPlayer, base: String, fallback: String) -> void:
+	var clip: String = _find_clip_in(anim, base)
+	if clip.is_empty() and not fallback.is_empty():
+		clip = _find_clip_in(anim, fallback)
+	if clip.is_empty() or (anim.current_animation == clip and anim.is_playing()):
+		return
+	anim.play(clip, CLIP_BLEND)
+
+
+# --- Riding a mount (travel field moves) ---------------------------------------------
+
+## Put [param mount] (a model, feet at its origin, facing +Z after [param mount_yaw_deg]) under the
+## rider, who is lifted [param lift] metres onto its back. It is a child of the model, so it turns
+## with every facing / free heading; the model's scale and yaw correction are undone for it.
+func set_mount(mount: Node3D, lift: float, mount_yaw_deg: float = 0.0) -> void:
+	clear_mount()
+	if mount == null or _model == null:
+		return
+	var s: float = _model.scale.x if absf(_model.scale.x) > 0.0001 else 1.0
+	_mount = mount
+	_rider_lift = lift
+	mount.name = "Mount"
+	mount.position = Vector3(0.0, -lift / s, 0.0)
+	mount.rotation.y = deg_to_rad(mount_yaw_deg - model_yaw_deg)
+	mount.scale = mount.scale / s
+	_model.position.y += lift
+	_model.add_child(mount)
+	_mount_anim = _find_anim_player(mount)
+	if _mount_anim != null:
+		_loop_locomotion(_mount_anim)
+	play_clip(CLIP_IDLE)
+
+
+## Step off the mount (it is freed; the rider back on the ground).
+func clear_mount() -> void:
+	if _mount != null and is_instance_valid(_mount):
+		_mount.get_parent().remove_child(_mount)
+		_mount.queue_free()
+	if _model != null and _rider_lift != 0.0:
+		_model.position.y -= _rider_lift
+	_mount = null
+	_mount_anim = null
+	_rider_lift = 0.0
+
+
+func is_mounted() -> bool:
+	return _mount != null and is_instance_valid(_mount)
+
+
+func mount_node() -> Node3D:
+	return _mount if is_mounted() else null
+
+
+# --- Asleep -------------------------------------------------------------------------
+
+## Put the actor to sleep / wake it: a drifting "z Z" over the head; [param lying] lays the model
+## flat on its back, head NORTH, face up, on a bed ([constant LIE_HEIGHT]) whose south cell is the
+## actor's. Waking restores the standing pose and the facing.
+func set_asleep(asleep: bool, lying: bool = false) -> void:
+	if asleep == _asleep and (lying and asleep) == _lying:
+		return
+	_asleep = asleep
+	_lying = asleep and lying
+	if _model != null:
+		if _lying:
+			_model.basis = lying_basis(model_yaw_deg) * Basis.from_scale(_model.scale)
+			_model.position = Vector3(0.0, LIE_HEIGHT, LIE_SHIFT_Z)
+		else:
+			var sc: Vector3 = _model.scale
+			_model.basis = Basis.from_scale(sc)
+			_model.position = Vector3(0.0, _rider_lift, 0.0)
+			_apply_facing_now()
+	_show_zz(asleep)
+
+
+func is_asleep() -> bool:
+	return _asleep
+
+
+func is_lying() -> bool:
+	return _lying
+
+
+## The rotation that lays a model (native forward = the direction yaw [param yaw_deg] turns to
+## +Z) flat on its back: its up axis to world north (-Z), its front to the sky (+Y).
+static func lying_basis(yaw_deg: float) -> Basis:
+	var fwd: Vector3 = Basis(Vector3.UP, -deg_to_rad(yaw_deg)) * Vector3(0, 0, 1)
+	var native := Basis(Vector3.UP.cross(fwd), Vector3.UP, fwd)
+	var world := Basis(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0))
+	return (world * native.inverse()).orthonormalized()
+
+
+func zz_visible() -> bool:
+	return _zz != null and is_instance_valid(_zz) and _zz.visible
+
+
+func _show_zz(on: bool) -> void:
+	if _zz_tween != null and _zz_tween.is_valid():
+		_zz_tween.kill()
+	_zz_tween = null
+	if not on:
+		if _zz != null and is_instance_valid(_zz):
+			_zz.visible = false
+		return
+	if _zz == null or not is_instance_valid(_zz):
+		_zz = Label3D.new()
+		_zz.name = "Zz"
+		_zz.text = "z Z"
+		_zz.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_zz.font = MenuTheme.display_font(0)
+		_zz.font_size = 72
+		_zz.outline_size = 16
+		_zz.modulate = Color(0.78, 0.86, 1.0)
+		_zz.outline_modulate = Color(0.12, 0.14, 0.3)
+		_zz.pixel_size = 0.01
+		add_child(_zz)
+	var base_y: float = (LIE_HEIGHT + 0.9) if _lying else 2.35
+	_zz.position = Vector3(0.25, base_y, LIE_SHIFT_Z - 0.6 if _lying else 0.0)
+	_zz.visible = true
+	if not _anims_on() or not is_inside_tree():
+		return
+	# A slow drift up and back, forever (cheap: one tween on a label).
+	_zz_tween = create_tween().set_loops()
+	_zz_tween.tween_property(_zz, "position:y", base_y + 0.3, 1.2).set_trans(Tween.TRANS_SINE)
+	_zz_tween.tween_property(_zz, "position:y", base_y, 1.2).set_trans(Tween.TRANS_SINE)
 
 
 ## Jump the clip now playing to [param fraction] (0..1) of its length -- so a crowd wearing the

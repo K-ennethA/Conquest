@@ -106,7 +106,7 @@ kind = "special"
 region_id = &"woodlands"
 map_pos = Vector2(0.114, 0.337)
 status = 0
-area_ids = Array[StringName]([&"depths_of_the_wood", &"depths_of_the_wood_2", &"depths_of_the_wood_3", &"depths_of_the_wood_4", &"depths_of_the_wood_heart"])
+area_ids = Array[StringName]([&"depths_of_the_wood", &"depths_of_the_wood_2", &"depths_of_the_wood_3", &"depths_of_the_wood_4", &"depths_of_the_wood_lost", &"depths_of_the_wood_heart"])
 open_flag = "world.depths_of_the_wood_open"
 description = "A maze of old forest north of Deepwood, with a glowing glade at its heart. A special encounter."
 
@@ -116,6 +116,8 @@ id = &"frostpeak_village"
 display_name = "Frostpeak Village"
 region_id = &"snowy_peaks"
 map_pos = Vector2(0.231, 0.166)
+status = 0
+area_ids = Array[StringName]([&"frostpeak_village", &"frostpeak_dream", &"frostpeak_inn", &"frostpeak_house"])
 open_flag = "world.frostpeak_open"
 description = "A village under the Snowy Peaks, up the north trail from Woodland Town."
 
@@ -146,6 +148,8 @@ display_name = "Hidden Depths"
 kind = "special"
 region_id = &"northern_mountains"
 map_pos = Vector2(0.85, 0.137)
+status = 0
+area_ids = Array[StringName]([&"hidden_depths", &"hidden_depths_2", &"hidden_depths_3", &"hidden_depths_heart"])
 open_flag = "world.hidden_depths_open"
 description = "A crystal cave in the eastern mountains. A special encounter."
 
@@ -161,23 +165,123 @@ description = "The Other Nation, beyond the Mountain Pass."
 
 [sub_resource type="Resource" id="Resource_c0ywa"]
 script = ExtResource("1_s3x8b")
+id = &"rocky_badlands"
+display_name = "Rocky Badlands"
+kind = "route"
+region_id = &"rocky_badlands"
+map_pos = Vector2(0.665, 0.398)
+status = 0
+area_ids = Array[StringName]([&"rocky_badlands"])
+open_flag = "world.badlands_open"
+description = "The Redrock road east from Crownhaven's east gate, through the red mesas."
+
+[sub_resource type="Resource" id="Resource_x5fcs"]
+script = ExtResource("1_s3x8b")
 id = &"redrock_village"
 display_name = "Redrock Village"
 region_id = &"rocky_badlands"
 map_pos = Vector2(0.856, 0.41)
+status = 0
+area_ids = Array[StringName]([&"redrock_village"])
 open_flag = "world.badlands_open"
 description = "A village among the red mesas, down the road from Crownhaven's east gate."
 
-[sub_resource type="Resource" id="Resource_x5fcs"]
+[sub_resource type="Resource" id="Resource_c75c1"]
+script = ExtResource("1_s3x8b")
+id = &"red_desert"
+display_name = "The Red Desert"
+kind = "route"
+region_id = &"rocky_badlands"
+map_pos = Vector2(0.8, 0.492)
+status = 0
+area_ids = Array[StringName]([&"red_desert", &"badlands_cave"])
+open_flag = "world.badlands_open"
+description = "Sand and red rock south of Redrock Village, where travellers say strange people come and go."
+
+[sub_resource type="Resource" id="Resource_1iivx"]
+script = ExtResource("1_s3x8b")
+id = &"secret_hideout"
+display_name = "Secret Hideout"
+kind = "dungeon"
+region_id = &"rocky_badlands"
+map_pos = Vector2(0.772, 0.532)
+status = 0
+area_ids = Array[StringName]([&"badlands_hideout", &"badlands_hideout_depths"])
+open_flag = "badlands.hideout_open"
+secret = true
+description = "A hideout dug behind a dead-end cave in the Red Desert."
+
+[sub_resource type="Resource" id="Resource_2lp2s"]
+script = ExtResource("1_s3x8b")
+id = &"stormreef_waters"
+display_name = "Stormreef Waters"
+kind = "route"
+region_id = &"open_ocean"
+map_pos = Vector2(0.645, 0.8)
+status = 0
+area_ids = Array[StringName]([&"stormreef_waters", &"stormreef_waters_erupted", &"volcano_path", &"volcano_crater"])
+description = "The open sea south of Beach Village, off Stormreef Isle."
+
+[sub_resource type="Resource" id="Resource_byfsg"]
+script = ExtResource("1_s3x8b")
+id = &"snowy_peaks"
+display_name = "The Snowy Peaks"
+kind = "route"
+region_id = &"snowy_peaks"
+map_pos = Vector2(0.262, 0.105)
+status = 0
+area_ids = Array[StringName]([&"snowy_peaks"])
+description = "The high trail into the peaks north of Frostpeak Village."
+
+[sub_resource type="Resource" id="Resource_107wc"]
+script = ExtResource("1_s3x8b")
+id = &"frozen_cave"
+display_name = "Frozen Cave"
+kind = "special"
+region_id = &"snowy_peaks"
+map_pos = Vector2(0.3, 0.075)
+status = 0
+area_ids = Array[StringName]([&"glacier_cave", &"glacier_cave_2", &"glacier_cave_3"])
+open_flag = "postgame.hidden_depths_awakened"
+secret = true
+description = "A cave on the Snowy Peaks, long sealed by ice. A special encounter."
+
+[sub_resource type="Resource" id="Resource_k2vnh"]
+script = ExtResource("1_s3x8b")
+id = &"crownhaven_graveyard"
+display_name = "Crownhaven Graveyard"
+kind = "route"
+region_id = &"heartlands"
+map_pos = Vector2(0.455, 0.372)
+status = 0
+area_ids = Array[StringName]([&"crownhaven_graveyard"])
+description = "The graveyard on Crownhaven's outskirts, beyond the west gate."
+
+[sub_resource type="Resource" id="Resource_svxwo"]
+script = ExtResource("1_s3x8b")
+id = &"old_crypt"
+display_name = "The Old Crypt"
+kind = "dungeon"
+region_id = &"heartlands"
+map_pos = Vector2(0.448, 0.352)
+status = 0
+area_ids = Array[StringName]([&"old_crypt", &"old_crypt_depths", &"old_crypt_end"])
+open_flag = "story.final_boss_beaten"
+secret = true
+description = "A crypt below Crownhaven's graveyard."
+
+[sub_resource type="Resource" id="Resource_o1hi2"]
 script = ExtResource("1_s3x8b")
 id = &"beach_village"
 display_name = "Beach Village"
 region_id = &"sunlit_coast"
 map_pos = Vector2(0.678, 0.685)
+status = 0
+area_ids = Array[StringName]([&"beach_village"])
 open_flag = "world.beach_road_open"
 description = "A harbour village on stilts, south-east of the capital: the port for the isles."
 
-[sub_resource type="Resource" id="Resource_c75c1"]
+[sub_resource type="Resource" id="Resource_hnc1b"]
 script = ExtResource("1_s3x8b")
 id = &"sunrise_isle"
 display_name = "Sunrise Isle"
@@ -187,17 +291,18 @@ map_pos = Vector2(0.91, 0.615)
 open_flag = "world.sea_routes_open"
 description = "An island to the east, a short sail from Beach Village."
 
-[sub_resource type="Resource" id="Resource_1iivx"]
+[sub_resource type="Resource" id="Resource_w246n"]
 script = ExtResource("1_s3x8b")
 id = &"island_of_tides"
 display_name = "Island of Tides"
 kind = "special"
 region_id = &"open_ocean"
 map_pos = Vector2(0.85, 0.81)
-open_flag = "world.sea_routes_open"
+status = 0
+area_ids = Array[StringName]([&"island_of_tides", &"tides_cave_1", &"tides_pocket", &"tides_cave_2", &"tides_cave_3", &"tides_depths"])
 description = "A storm-wrapped island far out to sea. A special encounter."
 
-[sub_resource type="Resource" id="Resource_2lp2s"]
+[sub_resource type="Resource" id="Resource_jmery"]
 script = ExtResource("1_s3x8b")
 id = &"stormreef_isle"
 display_name = "Stormreef Isle"
@@ -220,7 +325,7 @@ regions = {
 "sunlit_coast": "The Sunlit Coast",
 "woodlands": "The Deep Woods"
 }
-locations = Array[ExtResource("1_s3x8b")]([SubResource("Resource_j2pa5"), SubResource("Resource_btytd"), SubResource("Resource_kkhaq"), SubResource("Resource_54odp"), SubResource("Resource_i6wmj"), SubResource("Resource_0t3tf"), SubResource("Resource_e0er2"), SubResource("Resource_7dich"), SubResource("Resource_83ka0"), SubResource("Resource_moc57"), SubResource("Resource_ecw1r"), SubResource("Resource_eii5k"), SubResource("Resource_c71jp"), SubResource("Resource_0pqtp"), SubResource("Resource_ntetj"), SubResource("Resource_c0ywa"), SubResource("Resource_x5fcs"), SubResource("Resource_c75c1"), SubResource("Resource_1iivx"), SubResource("Resource_2lp2s")])
+locations = Array[ExtResource("1_s3x8b")]([SubResource("Resource_j2pa5"), SubResource("Resource_btytd"), SubResource("Resource_kkhaq"), SubResource("Resource_54odp"), SubResource("Resource_i6wmj"), SubResource("Resource_0t3tf"), SubResource("Resource_e0er2"), SubResource("Resource_7dich"), SubResource("Resource_83ka0"), SubResource("Resource_moc57"), SubResource("Resource_ecw1r"), SubResource("Resource_eii5k"), SubResource("Resource_c71jp"), SubResource("Resource_0pqtp"), SubResource("Resource_ntetj"), SubResource("Resource_c0ywa"), SubResource("Resource_x5fcs"), SubResource("Resource_c75c1"), SubResource("Resource_1iivx"), SubResource("Resource_2lp2s"), SubResource("Resource_byfsg"), SubResource("Resource_107wc"), SubResource("Resource_k2vnh"), SubResource("Resource_svxwo"), SubResource("Resource_o1hi2"), SubResource("Resource_hnc1b"), SubResource("Resource_w246n"), SubResource("Resource_jmery")])
 roads = Array[Dictionary]([{
 "a": &"oakvale",
 "b": &"mossway",
@@ -255,8 +360,20 @@ roads = Array[Dictionary]([{
 "kind": "main"
 }, {
 "a": &"crownhaven",
+"b": &"rocky_badlands",
+"kind": "main"
+}, {
+"a": &"rocky_badlands",
 "b": &"redrock_village",
 "kind": "main"
+}, {
+"a": &"redrock_village",
+"b": &"red_desert",
+"kind": "secondary"
+}, {
+"a": &"red_desert",
+"b": &"secret_hideout",
+"kind": "secondary"
 }, {
 "a": &"crownhaven",
 "b": &"beach_village",
@@ -299,6 +416,30 @@ roads = Array[Dictionary]([{
 "kind": "sea"
 }, {
 "a": &"beach_village",
+"b": &"stormreef_waters",
+"kind": "sea"
+}, {
+"a": &"stormreef_waters",
 "b": &"stormreef_isle",
+"kind": "sea"
+}, {
+"a": &"frostpeak_village",
+"b": &"snowy_peaks",
+"kind": "secondary"
+}, {
+"a": &"snowy_peaks",
+"b": &"frozen_cave",
+"kind": "secondary"
+}, {
+"a": &"sparse_forest",
+"b": &"crownhaven_graveyard",
+"kind": "secondary"
+}, {
+"a": &"crownhaven_graveyard",
+"b": &"old_crypt",
+"kind": "secondary"
+}, {
+"a": &"stormreef_waters",
+"b": &"island_of_tides",
 "kind": "sea"
 }])

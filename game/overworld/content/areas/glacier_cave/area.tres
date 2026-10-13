@@ -1,0 +1,220 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_1ffkd"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_1hm4r"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="3_mwptm"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/glacier_cave/terrain.tres" id="4_gctun"]
+
+[sub_resource type="Resource" id="Resource_4dqlv"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_5_2"
+cell = Vector3i(5, 2, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_5q23u"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_8_2"
+cell = Vector3i(8, 2, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_lccp2"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_1_3"
+cell = Vector3i(1, 3, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_i1ipm"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_5_3"
+cell = Vector3i(5, 3, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_6de2r"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_6_5"
+cell = Vector3i(6, 5, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_tqdne"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_9_6"
+cell = Vector3i(9, 6, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_aq7h8"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_2_7"
+cell = Vector3i(2, 7, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_t0ggn"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_7_8"
+cell = Vector3i(7, 8, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_s8lhw"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_12_8"
+cell = Vector3i(12, 8, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_vnb6p"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_2_9"
+cell = Vector3i(2, 9, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_dswdf"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_3_9"
+cell = Vector3i(3, 9, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_j05n5"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_6_9"
+cell = Vector3i(6, 9, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_mk0cp"]
+script = ExtResource("1_1ffkd")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_8_9"
+cell = Vector3i(8, 9, 0)
+tint = Color(0.62, 0.7, 0.78, 1)
+
+[sub_resource type="Resource" id="Resource_ovpmg"]
+script = ExtResource("1_1ffkd")
+prop = "hole"
+footprint = Vector2i(1, 1)
+id = &"crack_0_pit"
+cell = Vector3i(7, 3, 0)
+tint = Color(0.72, 0.84, 0.94, 1)
+
+[sub_resource type="Resource" id="Resource_ginc0"]
+script = ExtResource("2_1hm4r")
+area_rect = Rect2i(7, 3, 1, 1)
+target_area = &"glacier_cave"
+target_entry = &"mouth"
+arrival_toast = "You slip into a crack in the ice and tumble back down the slope..."
+id = &"crack_0"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_2npen"]
+script = ExtResource("1_1ffkd")
+prop = "hole"
+footprint = Vector2i(1, 1)
+id = &"crack_1_pit"
+cell = Vector3i(2, 5, 0)
+tint = Color(0.72, 0.84, 0.94, 1)
+
+[sub_resource type="Resource" id="Resource_b6yet"]
+script = ExtResource("2_1hm4r")
+area_rect = Rect2i(2, 5, 1, 1)
+target_area = &"glacier_cave"
+target_entry = &"mouth"
+arrival_toast = "You slip into a crack in the ice and tumble back down the slope..."
+id = &"crack_1"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_abivf"]
+script = ExtResource("1_1ffkd")
+prop = "hole"
+footprint = Vector2i(1, 1)
+id = &"crack_2_pit"
+cell = Vector3i(9, 7, 0)
+tint = Color(0.72, 0.84, 0.94, 1)
+
+[sub_resource type="Resource" id="Resource_dexp0"]
+script = ExtResource("2_1hm4r")
+area_rect = Rect2i(9, 7, 1, 1)
+target_area = &"glacier_cave"
+target_entry = &"mouth"
+arrival_toast = "You slip into a crack in the ice and tumble back down the slope..."
+id = &"crack_2"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_u5mi0"]
+script = ExtResource("1_1ffkd")
+prop = "hole"
+footprint = Vector2i(1, 1)
+id = &"crack_3_pit"
+cell = Vector3i(1, 9, 0)
+tint = Color(0.72, 0.84, 0.94, 1)
+
+[sub_resource type="Resource" id="Resource_p0w1i"]
+script = ExtResource("2_1hm4r")
+area_rect = Rect2i(1, 9, 1, 1)
+target_area = &"glacier_cave"
+target_entry = &"mouth"
+arrival_toast = "You slip into a crack in the ice and tumble back down the slope..."
+id = &"crack_3"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_cqabt"]
+script = ExtResource("1_1ffkd")
+prop = "hole"
+footprint = Vector2i(1, 1)
+id = &"hole_down_pit"
+cell = Vector3i(3, 1, 0)
+tint = Color(0.5, 0.56, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_wbjlf"]
+script = ExtResource("2_1hm4r")
+area_rect = Rect2i(3, 1, 1, 1)
+target_area = &"glacier_cave_2"
+target_entry = &"drop"
+id = &"hole_down"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_nqx64"]
+script = ExtResource("2_1hm4r")
+area_rect = Rect2i(7, 11, 1, 1)
+target_area = &"snowy_peaks"
+target_entry = &"cave_mouth"
+id = &"mouth_exit"
+blocking = false
+
+[resource]
+script = ExtResource("3_mwptm")
+area_id = &"glacier_cave"
+display_name = "Frozen Cave"
+terrain = ExtResource("4_gctun")
+kind = 3
+region_id = &"snowy_peaks"
+world_map_pos = Vector2(0.3, 0.075)
+entry_points = {
+"mouth": {
+"cell": [7, 10, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_4dqlv"), SubResource("Resource_5q23u"), SubResource("Resource_lccp2"), SubResource("Resource_i1ipm"), SubResource("Resource_6de2r"), SubResource("Resource_tqdne"), SubResource("Resource_aq7h8"), SubResource("Resource_t0ggn"), SubResource("Resource_s8lhw"), SubResource("Resource_vnb6p"), SubResource("Resource_dswdf"), SubResource("Resource_j05n5"), SubResource("Resource_mk0cp"), SubResource("Resource_ovpmg"), SubResource("Resource_ginc0"), SubResource("Resource_2npen"), SubResource("Resource_b6yet"), SubResource("Resource_abivf"), SubResource("Resource_dexp0"), SubResource("Resource_u5mi0"), SubResource("Resource_p0w1i"), SubResource("Resource_cqabt"), SubResource("Resource_wbjlf"), SubResource("Resource_nqx64")])
+level_band = Vector2i(30, 40)
+slide_tiles = Array[StringName]([&"ice_sheet"])

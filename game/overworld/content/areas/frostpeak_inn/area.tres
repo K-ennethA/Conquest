@@ -1,0 +1,277 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_k60h8"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="2_b7pb1"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="3_kaoab"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/HealPartyCommand.gd" id="4_1qhoa"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="5_68jtx"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_btxxa"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="7_rbc5c"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="8_s2ouj"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="9_56luv"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="10_5ik86"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/WarpCommand.gd" id="11_rwroq"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="12_u7wf0"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/frostpeak_inn/terrain.tres" id="13_8sh6d"]
+
+[sub_resource type="Resource" id="Resource_5jt6n"]
+script = ExtResource("1_k60h8")
+prop = "mat"
+footprint = Vector2i(1, 1)
+id = &"exit_mat"
+cell = Vector3i(6, 7, 0)
+tint = Color(0.62, 0.22, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_wnlam"]
+script = ExtResource("2_b7pb1")
+area_rect = Rect2i(6, 7, 1, 1)
+target_area = &"frostpeak_village"
+target_entry = &"door_fp_inn"
+id = &"exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_l8wms"]
+script = ExtResource("1_k60h8")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_w"
+cell = Vector3i(1, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_blc28"]
+script = ExtResource("1_k60h8")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_e"
+cell = Vector3i(10, 1, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_0gaic"]
+script = ExtResource("3_kaoab")
+speaker_id = &"npc_fp_innkeeper"
+speaker_name = "Innkeeper"
+figure = "villager"
+asleep_if = "not has(\"frostpeak.awake\")"
+id = &"fp_innkeeper"
+cell = Vector3i(9, 4, 0)
+display_name = "Innkeeper"
+tint = Color(0.5, 0.36, 0.3, 1)
+
+[sub_resource type="Resource" id="Resource_hmmpp"]
+script = ExtResource("4_1qhoa")
+
+[sub_resource type="Resource" id="Resource_lm4ft"]
+script = ExtResource("5_68jtx")
+
+[sub_resource type="Resource" id="Resource_lqcew"]
+script = ExtResource("6_btxxa")
+text = "You rest, and wake refreshed. Your party is ready to go."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_52y12"]
+script = ExtResource("7_rbc5c")
+beats = Array[Resource]([SubResource("Resource_lqcew")])
+
+[sub_resource type="Resource" id="Resource_rnw7i"]
+script = ExtResource("8_s2ouj")
+label = "Rest"
+commands = Array[Resource]([SubResource("Resource_hmmpp"), SubResource("Resource_lm4ft"), SubResource("Resource_52y12")])
+
+[sub_resource type="Resource" id="Resource_cyw8k"]
+script = ExtResource("8_s2ouj")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_bb31o"]
+script = ExtResource("6_btxxa")
+text = "Rest a while?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_ihfs7"]
+script = ExtResource("9_56luv")
+prompt = SubResource("Resource_bb31o")
+options = Array[Resource]([SubResource("Resource_rnw7i"), SubResource("Resource_cyw8k")])
+
+[sub_resource type="Resource" id="Resource_pyoh3"]
+script = ExtResource("4_1qhoa")
+
+[sub_resource type="Resource" id="Resource_8cdm6"]
+script = ExtResource("6_btxxa")
+text = "You close your eyes... and the room tilts into a strange, violet light."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_13hr3"]
+script = ExtResource("7_rbc5c")
+beats = Array[Resource]([SubResource("Resource_8cdm6")])
+
+[sub_resource type="Resource" id="Resource_4oxoq"]
+script = ExtResource("11_rwroq")
+area_id = &"frostpeak_dream"
+entry = &"dream_start"
+
+[sub_resource type="Resource" id="Resource_5au7i"]
+script = ExtResource("8_s2ouj")
+label = "Rest"
+commands = Array[Resource]([SubResource("Resource_pyoh3"), SubResource("Resource_13hr3"), SubResource("Resource_4oxoq")])
+
+[sub_resource type="Resource" id="Resource_gyn28"]
+script = ExtResource("8_s2ouj")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_5g6fc"]
+script = ExtResource("6_btxxa")
+text = "Everyone in the inn is fast asleep. Lie down in the empty bed and rest?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_ker4p"]
+script = ExtResource("9_56luv")
+prompt = SubResource("Resource_5g6fc")
+options = Array[Resource]([SubResource("Resource_5au7i"), SubResource("Resource_gyn28")])
+
+[sub_resource type="Resource" id="Resource_8l0kd"]
+script = ExtResource("10_5ik86")
+condition = "not has(\"frostpeak.awake\")"
+then_commands = Array[Resource]([SubResource("Resource_ker4p")])
+else_commands = Array[Resource]([SubResource("Resource_ihfs7")])
+
+[sub_resource type="Resource" id="Resource_ubxk0"]
+script = ExtResource("1_k60h8")
+prop = "bed"
+footprint = Vector2i(1, 2)
+verb = "Rest"
+id = &"bed_a"
+cell = Vector3i(3, 1, 0)
+tint = Color(0.42, 0.3, 0.52, 1)
+on_interact = Array[Resource]([SubResource("Resource_8l0kd")])
+
+[sub_resource type="Resource" id="Resource_xxj1t"]
+script = ExtResource("3_kaoab")
+speaker_id = &"npc_fp_traveller"
+speaker_name = "Traveller"
+figure = "villager"
+asleep_if = "not has(\"frostpeak.awake\")"
+sleep_pose = "lie"
+id = &"fp_traveller"
+cell = Vector3i(5, 2, 0)
+display_name = "Traveller"
+tint = Color(0.44, 0.4, 0.3, 1)
+visible_if = "not has(\"frostpeak.awake\")"
+
+[sub_resource type="Resource" id="Resource_8bp2n"]
+script = ExtResource("1_k60h8")
+prop = "bed"
+footprint = Vector2i(1, 2)
+id = &"bed_b"
+cell = Vector3i(5, 1, 0)
+tint = Color(0.42, 0.3, 0.52, 1)
+
+[sub_resource type="Resource" id="Resource_u7tg8"]
+script = ExtResource("4_1qhoa")
+
+[sub_resource type="Resource" id="Resource_sic4c"]
+script = ExtResource("5_68jtx")
+
+[sub_resource type="Resource" id="Resource_hiojf"]
+script = ExtResource("6_btxxa")
+text = "You rest, and wake refreshed. Your party is ready to go."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_yhusk"]
+script = ExtResource("7_rbc5c")
+beats = Array[Resource]([SubResource("Resource_hiojf")])
+
+[sub_resource type="Resource" id="Resource_qfuj0"]
+script = ExtResource("8_s2ouj")
+label = "Rest"
+commands = Array[Resource]([SubResource("Resource_u7tg8"), SubResource("Resource_sic4c"), SubResource("Resource_yhusk")])
+
+[sub_resource type="Resource" id="Resource_5btcj"]
+script = ExtResource("8_s2ouj")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_lf6mv"]
+script = ExtResource("6_btxxa")
+text = "Rest a while?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_wmd7e"]
+script = ExtResource("9_56luv")
+prompt = SubResource("Resource_lf6mv")
+options = Array[Resource]([SubResource("Resource_qfuj0"), SubResource("Resource_5btcj")])
+
+[sub_resource type="Resource" id="Resource_4vfgi"]
+script = ExtResource("4_1qhoa")
+
+[sub_resource type="Resource" id="Resource_0v0ec"]
+script = ExtResource("6_btxxa")
+text = "You close your eyes... and the room tilts into a strange, violet light."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_8nil8"]
+script = ExtResource("7_rbc5c")
+beats = Array[Resource]([SubResource("Resource_0v0ec")])
+
+[sub_resource type="Resource" id="Resource_xls4a"]
+script = ExtResource("11_rwroq")
+area_id = &"frostpeak_dream"
+entry = &"dream_start"
+
+[sub_resource type="Resource" id="Resource_2bbf3"]
+script = ExtResource("8_s2ouj")
+label = "Rest"
+commands = Array[Resource]([SubResource("Resource_4vfgi"), SubResource("Resource_8nil8"), SubResource("Resource_xls4a")])
+
+[sub_resource type="Resource" id="Resource_4i6wt"]
+script = ExtResource("8_s2ouj")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_pkbob"]
+script = ExtResource("6_btxxa")
+text = "Everyone in the inn is fast asleep. Lie down in the empty bed and rest?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_gle0j"]
+script = ExtResource("9_56luv")
+prompt = SubResource("Resource_pkbob")
+options = Array[Resource]([SubResource("Resource_2bbf3"), SubResource("Resource_4i6wt")])
+
+[sub_resource type="Resource" id="Resource_bdeun"]
+script = ExtResource("10_5ik86")
+condition = "not has(\"frostpeak.awake\")"
+then_commands = Array[Resource]([SubResource("Resource_gle0j")])
+else_commands = Array[Resource]([SubResource("Resource_wmd7e")])
+
+[sub_resource type="Resource" id="Resource_bva13"]
+script = ExtResource("1_k60h8")
+prop = "bed"
+footprint = Vector2i(1, 2)
+verb = "Rest"
+id = &"bed_c"
+cell = Vector3i(8, 1, 0)
+tint = Color(0.42, 0.3, 0.52, 1)
+on_interact = Array[Resource]([SubResource("Resource_bdeun")])
+
+[resource]
+script = ExtResource("12_u7wf0")
+area_id = &"frostpeak_inn"
+display_name = "Frostpeak Inn"
+terrain = ExtResource("13_8sh6d")
+kind = 2
+region_id = &"snowy_peaks"
+world_map_pos = Vector2(0.231, 0.166)
+entry_points = {
+"bed": {
+"cell": [3, 3, 0],
+"facing": "north"
+},
+"door": {
+"cell": [6, 6, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_5jt6n"), SubResource("Resource_wnlam"), SubResource("Resource_l8wms"), SubResource("Resource_blc28"), SubResource("Resource_0gaic"), SubResource("Resource_ubxk0"), SubResource("Resource_xxj1t"), SubResource("Resource_8bp2n"), SubResource("Resource_bva13")])
+parent_area = &"frostpeak_village"
+level_band = Vector2i(18, 26)

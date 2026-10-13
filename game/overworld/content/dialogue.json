@@ -1,6 +1,108 @@
 {
 	"_about": "Ambient NPC dialogue (DialogueBank). Per area, per NPC id: an ORDERED list of variants -- the first whose 'if' passes plays. 'if' is a story condition: after('flag'), before('flag'), has('flag'), flag('x') >= 2, visited('area'), rests_since('flag') >= 3, steps_since('flag') >= 200, minutes_since('flag') >= 10; blank = always. Line speakers: self, hero, narrator or another NPC id of the area. Edit with the Dialogue editor (Godot: the 'Dialogue' main-screen tab) or by hand; no rebuild, no save migration. Cutscenes stay in game/overworld/build/build_story_content.gd.",
 	"areas": {
+		"beach_village": {
+			"bv_child": {
+				"note": "TODO(story): placeholder line.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I found three shells this morning! The chief says the sea gives to people who are patient."
+							}
+						]
+					}
+				]
+			},
+			"bv_fisher": {
+				"note": "TODO(story): placeholder line.",
+				"variants": [
+					{
+						"if": "after('postgame.hidden_depths_awakened')",
+						"label": "the eruption",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Did you see the smoke out past the reef? Something rose out of the sea off Stormreef -- a whole new island, burning."
+							}
+						]
+					},
+					{
+						"if": "after('beach.eloi_beaten')",
+						"label": "after Eloi",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "You beat the chief? Then the sea will carry you. Mind the deep water past the islet."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "See the little islet off the east pier? Only a creature that can swim the sea gets you there."
+							}
+						]
+					}
+				]
+			},
+			"bv_harbour_hand": {
+				"note": "TODO(story): placeholder line.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The isles are out past the reef. No ships are sailing that far today."
+							}
+						]
+					}
+				]
+			},
+			"bv_net_mender": {
+				"note": "TODO(story): placeholder line.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Our chief lives in the longhouse to the east. Nobody here knows the sea like him."
+							}
+						]
+					}
+				]
+			},
+			"cael": {
+				"note": "TODO(story): placeholder greeting (DECISIONS.md #88: Cael is met in Beach Village; #60 a friendly rival -- the builder's spar offer follows this line until it is fought).",
+				"variants": [
+					{
+						"if": "after('beach.cael_sparred')",
+						"label": "after the spar",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "That was a good bout, {hero}. The sea air suits our partners."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "{hero}! You made it to the coast too."
+							}
+						]
+					}
+				]
+			}
+		},
 		"crownhaven": {
 			"baker": {
 				"variants": [
@@ -562,6 +664,36 @@
 				]
 			}
 		},
+		"crownhaven_graveyard": {
+			"gravekeeper": {
+				"note": "TODO(story): placeholder lines (DECISIONS.md #100: after the final boss a grave is found open).",
+				"variants": [
+					{
+						"if": "after('story.final_boss_beaten')",
+						"label": "after the final boss",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "One of the old graves... the stone's been dragged aside and the tomb's open. Steps going down into the dark."
+							},
+							{
+								"speaker": "self",
+								"text": "I've kept this ground forty years and never seen the like. Don't go down there alone."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Quiet out here, past the city walls. I keep the graves tidy and the gate shut at night."
+							}
+						]
+					}
+				]
+			}
+		},
 		"deepwood_village": {
 			"dv_child": {
 				"note": "TODO(story): placeholder line.",
@@ -599,7 +731,7 @@
 						"lines": [
 							{
 								"speaker": "self",
-								"text": "The deep forest turns travellers round. Follow the lights, or it walks you right back out."
+								"text": "The deep forest turns travellers round. Follow the deepest roots and the greatest trees -- the wrong ways lead into thickets full of angry creatures."
 							}
 						]
 					}
@@ -614,6 +746,232 @@
 							{
 								"speaker": "self",
 								"text": "{hero}! You came to Deepwood too."
+							}
+						]
+					}
+				]
+			}
+		},
+		"frostpeak_house": {
+			"fp_child_bed": {
+				"note": "TODO(story): placeholder line (in bed while the town sleeps).",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "A child is curled up asleep under the blankets."
+							}
+						]
+					}
+				]
+			},
+			"fp_sleeper": {
+				"note": "TODO(story): placeholder line (in bed while the town sleeps).",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "They are asleep in bed and will not wake."
+							}
+						]
+					}
+				]
+			}
+		},
+		"frostpeak_inn": {
+			"fp_innkeeper": {
+				"note": "TODO(story): placeholder lines (asleep until the town wakes, DECISIONS.md #95; the beds are where you rest).",
+				"variants": [
+					{
+						"if": "after('frostpeak.awake')",
+						"label": "the town awake",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Welcome! Sorry about before -- I can't remember falling asleep. Rest in any empty bed."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "The innkeeper is asleep behind the counter. There are empty beds against the wall."
+							}
+						]
+					}
+				]
+			},
+			"fp_traveller": {
+				"note": "TODO(story): placeholder line (in bed while the town sleeps).",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "A traveller is asleep in bed, breathing slow and deep. Nothing you do wakes them."
+							}
+						]
+					}
+				]
+			}
+		},
+		"frostpeak_village": {
+			"fp_child": {
+				"note": "TODO(story): placeholder lines (asleep until the town wakes, DECISIONS.md #95).",
+				"variants": [
+					{
+						"if": "after('frostpeak.awake')",
+						"label": "the town awake",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I dreamed about two creatures playing tag in the sky! Then it got scary."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "A child sleeps standing up in the snow, smiling at something."
+							}
+						]
+					}
+				]
+			},
+			"fp_elder": {
+				"note": "TODO(story): placeholder lines (asleep until the town wakes, DECISIONS.md #95).",
+				"variants": [
+					{
+						"if": "after('frostpeak.awake')",
+						"label": "the town awake",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "We all dreamed the same dream, they say. Our chief brought us back."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "An old villager dozes where they stand, murmuring in their sleep."
+							}
+						]
+					}
+				]
+			},
+			"fp_hunter": {
+				"note": "TODO(story): placeholder lines (asleep until the town wakes, DECISIONS.md #95).",
+				"variants": [
+					{
+						"if": "after('frostpeak.awake')",
+						"label": "the town awake",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I lost a whole day's hunt to that sleep. Feels like I lost a week."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "A hunter, fast asleep with a bow still in hand."
+							}
+						]
+					}
+				]
+			},
+			"fp_watch": {
+				"note": "TODO(story): placeholder lines (asleep until the town wakes, DECISIONS.md #95).",
+				"variants": [
+					{
+						"if": "after('frostpeak.awake') and after('postgame.hidden_depths_awakened')",
+						"label": "the blizzard",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "This blizzard came down off the peaks out of nowhere. Up the high trail, they say the old ice has broken open."
+							}
+						]
+					},
+					{
+						"if": "after('frostpeak.awake')",
+						"label": "the town awake",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "I fell asleep at my post! The whole village did. Strangest thing."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "The trail watch is asleep on their feet, leaning on a spear. They don't stir."
+							}
+						]
+					}
+				]
+			},
+			"fp_woodcutter": {
+				"note": "TODO(story): placeholder lines (asleep until the town wakes, DECISIONS.md #95).",
+				"variants": [
+					{
+						"if": "after('frostpeak.awake')",
+						"label": "the town awake",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Back to the woodpile. The cold doesn't wait for anyone."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "A woodcutter has nodded off beside the woodpile, axe resting on one shoulder."
+							}
+						]
+					}
+				]
+			},
+			"saevi": {
+				"note": "TODO(story): placeholder lines (DECISIONS.md #49 / #85 / #95: the winter chief, asleep with her people until the dream is set right).",
+				"variants": [
+					{
+						"if": "after('frostpeak.awake')",
+						"label": "the town awake",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "My people are awake, and the dreams are quiet. Frostpeak owes you, {hero}."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "She stands by her lodge, fast asleep. Her brow is furrowed, as if she is fighting something in her dreams."
 							}
 						]
 					}
@@ -1055,6 +1413,122 @@
 				]
 			}
 		},
+		"red_desert": {
+			"hooded_figure": {
+				"note": "TODO(story): placeholder line (DECISIONS.md #96: the person the hero follows into the cave).",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "narrator",
+								"text": "The figure pulls their hood lower and says nothing."
+							}
+						]
+					}
+				]
+			}
+		},
+		"redrock_village": {
+			"rv_child": {
+				"note": "TODO(story): placeholder line.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Mum says not to go into the desert. She says there are people out there who don't want to be found."
+							}
+						]
+					}
+				]
+			},
+			"rv_elder": {
+				"note": "TODO(story): placeholder lines (DECISIONS.md #96: villagers talk about strange people going out into the badlands and the desert).",
+				"variants": [
+					{
+						"if": "after('badlands.hideout_cleared')",
+						"label": "after the hideout",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Soldiers from the capital came through, asking about the desert. Whatever was out there, it's quiet now."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Welcome to Redrock. Strangers come through more often than they used to -- and they don't stay in the village."
+							},
+							{
+								"speaker": "self",
+								"text": "They walk out into the desert to the south, and some never seem to come back."
+							}
+						]
+					}
+				]
+			},
+			"rv_miner": {
+				"note": "TODO(story): placeholder lines. THE CLUE (DECISIONS.md #96): the password's MIDDLE word, overheard -- keep it in step with HIDEOUT_PASSWORD in the builder.",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "Strange folk out in the badlands at night. Hooded, quiet, always heading south."
+							},
+							{
+								"speaker": "self",
+								"text": "One of them stopped by the well once, muttering under their breath. Same word, over and over... \"ember\". Ember, ember."
+							}
+						]
+					}
+				]
+			},
+			"rv_trader": {
+				"note": "TODO(story): placeholder lines (the rumours, DECISIONS.md #96).",
+				"variants": [
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "My caravan saw lights out in the desert. Not a camp -- something under the cliffs."
+							}
+						]
+					}
+				]
+			},
+			"rv_watch": {
+				"note": "TODO(story): placeholder lines (the rumours, DECISIONS.md #96).",
+				"variants": [
+					{
+						"if": "after('badlands.figure_entered')",
+						"label": "after the figure",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "You followed one of them? Into a cave? Be careful down there."
+							}
+						]
+					},
+					{
+						"if": "",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "South is the Red Desert. I've seen hooded people slip past at dusk, heading for the cliffs."
+							}
+						]
+					}
+				]
+			}
+		},
 		"river_crossing": {
 			"hobb": {
 				"variants": [
@@ -1108,6 +1582,16 @@
 			},
 			"joss": {
 				"variants": [
+					{
+						"if": "after('world.beach_road_open')",
+						"label": "the coast road open",
+						"lines": [
+							{
+								"speaker": "self",
+								"text": "The ford's finally down! Coast road's open to Beach Village again. Now if only my axle would hold."
+							}
+						]
+					},
 					{
 						"if": "after('opening.attack')",
 						"label": "after the raid",

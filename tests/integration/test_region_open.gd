@@ -8,7 +8,9 @@ extends GutTest
 
 const StoryFixture := preload("res://tests/helpers/story_fixture.gd")
 
-## The exits that stay closed after the opening: the roads toward places that are not built yet.
+## The exits shut by their own world.* flag after the opening: the roads toward places that are not
+## built yet, and those whose flag the town they leave from sets on the hero's next visit (the coast,
+## the peaks, the badlands -- test_regions_beyond.gd).
 const CLOSED_ROADS: Array[String] = [
 	"oakvale_ruins/west_exit",          # Farm Hamlet
 	"river_crossing/east_exit",         # Beach Village

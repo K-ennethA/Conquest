@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeatherResource" format=3]
+
+[ext_resource type="Script" path="res://game/weather/WeatherResource.gd" id="1_wres"]
+
+[resource]
+script = ExtResource("1_wres")
+id = &"blizzard"
+display_name = "Blizzard"
+icon = "❄"
+color = Color(0.82, 0.9, 1, 1)
+description = "Driving snow and a white-out wind. (No combat effects yet -- a look only, for now.)"
+fx_kind = &"snow"
+sun_color = Color(0.78, 0.84, 1, 1)
+sun_energy_scale = 0.7
+ambient_scale = 1.05
+ambient_tint = Color(0.86, 0.92, 1, 1)
+fog_color = Color(0.82, 0.86, 0.92, 1)
+fog_density = 0.03
+saturation = 0.75
+brightness = 1.02
+sky_tint = Color(0.84, 0.88, 0.94, 1)
+wind_strength = 2.4

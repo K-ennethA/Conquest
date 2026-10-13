@@ -249,7 +249,7 @@ func test_a_maw_detonation_erupts_across_its_whole_patch() -> void:
 			blast.append(Vector3i(2 + dx, 2 + dy, 0))
 	var hazard := DelayedBurstHazard.new(blast, 15,
 		CombatTypes.DamageCategory.MAGICAL, CombatTypes.TargetKind.ENEMY, battle["caster"])
-	hazard.element = &"dark"
+	hazard.element = &"grim"
 
 	var fuse := DelayedBurstStatus.new()
 	fuse.arm(hazard)

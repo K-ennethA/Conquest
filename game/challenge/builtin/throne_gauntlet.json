@@ -135,8 +135,8 @@
 				{ "position": { "x": 4, "y": 0 }, "player_id": 0, "spawn_kind": "Start" },
 				{ "position": { "x": 5, "y": 0 }, "player_id": 0, "spawn_kind": "Start" },
 				{ "position": { "x": 6, "y": 0 }, "player_id": 0, "spawn_kind": "Start" },
-				{ "position": { "x": 3, "y": 7 }, "player_id": 1, "spawn_kind": "Start", "character_id": "undead", "ai_stance": "aggressive" },
-				{ "position": { "x": 6, "y": 7 }, "player_id": 1, "spawn_kind": "Start", "character_id": "undead", "ai_stance": "aggressive" },
+				{ "position": { "x": 3, "y": 7 }, "player_id": 1, "spawn_kind": "Start", "character_id": "mycothrall", "ai_stance": "aggressive" },
+				{ "position": { "x": 6, "y": 7 }, "player_id": 1, "spawn_kind": "Start", "character_id": "blightcap", "ai_stance": "aggressive" },
 				{ "position": { "x": 5, "y": 7 }, "player_id": 1, "spawn_kind": "Start", "character_id": "gem_knight", "ai_stance": "defensive", "aggro_range": 3 },
 				{ "position": { "x": 4, "y": 9 }, "player_id": 1, "spawn_kind": "Start", "character_id": "necromancer", "ai_stance": "defensive", "aggro_range": 5, "leash_radius": 2 }
 			]

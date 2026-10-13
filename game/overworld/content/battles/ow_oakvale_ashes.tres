@@ -560,7 +560,7 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "undead",
+"character_id": "tree_grunt",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,
@@ -573,7 +573,7 @@ unit_spawns = Array[Dictionary]([{
 }, {
 "aggro_range": -1,
 "ai_stance": "",
-"character_id": "undead",
+"character_id": "petalfang",
 "leash_radius": -1,
 "max_spawns": 1,
 "player_id": 1,

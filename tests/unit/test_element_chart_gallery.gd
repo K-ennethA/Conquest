@@ -202,20 +202,22 @@ func test_being_weak_to_something_counts_as_a_matchup() -> void:
 
 # --- The shipped chart -------------------------------------------------------
 
-func test_the_shipped_chart_leaves_wind_unpaired() -> void:
+func test_every_shipped_type_has_a_matchup() -> void:
+	# The 15-type chart (owner, 2026-10-12) leaves no type unpaired; the unpaired case is
+	# still covered above with an injected chart.
 	ElementChart.reset_chart()
-	assert_true(ElementChartGallery.has_no_matchups(&"wind"),
-		"wind ships with NO opposite on purpose (it has no content yet) -- the page says "
-		+ "so rather than inventing one")
+	for element in ElementChart.vocabulary():
+		assert_false(ElementChartGallery.has_no_matchups(element),
+			"%s has at least one authored matchup" % element)
 	assert_ne(ElementChartGallery.self_resist_text(&"wind"), "",
-		"it does still resist itself, and that line is shown")
+		"wind resists itself, and that line is shown")
 
 
-func test_the_shipped_chart_reads_fire_and_nature_both_ways() -> void:
+func test_the_shipped_chart_reads_fire_and_plant_both_ways() -> void:
 	ElementChart.reset_chart()
-	assert_true(ElementChartGallery.strong_against(&"fire").has(&"nature"),
+	assert_true(ElementChartGallery.strong_against(&"fire").has(&"plant"),
 		"fire burns wood")
-	assert_true(ElementChartGallery.weak_to(&"fire").has(&"nature"),
-		"and green chokes out flame -- the pair is authored in both directions")
-	assert_eq(ElementChartGallery.cell_text(ElementChart.multiplier(&"fire", &"nature")),
+	assert_true(ElementChartGallery.weak_to(&"fire").has(&"water"),
+		"and water douses flame -- read from the other direction")
+	assert_eq(ElementChartGallery.cell_text(ElementChart.multiplier(&"fire", &"plant")),
 		"×1.25", "which the grid cell prints as its seeded multiplier")

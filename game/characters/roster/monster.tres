@@ -14,7 +14,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"monster"
-element = &"dark"
+element = &"grim"
 display_name = "Duskmaw"
 description = "A void-black horror crowned in slow embers, and the reason nobody scouts a treeline after sundown. Duskmaw does not close on you: it holds at the edge of the light, marks what it wants, and takes it from a distance you thought was safe. It leaves holes in the ground behind it -- thin, patient tears it can be standing in again a breath later. The red maw is glimpsed only in the instant it strikes, and by then the dark has already closed behind it."
 model_scene = ExtResource("2_model")

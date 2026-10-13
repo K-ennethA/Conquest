@@ -34,6 +34,10 @@ var enabled: bool = true
 ## Preload + hold [constant BATTLE_SCENES]. Off on the headless renderer (tests / CI boot their
 ## battles directly; a 1.7 s background load per suite would only slow them down).
 var preload_battle_scenes: bool = DisplayServer.get_name() != "headless"
+## Prewarm the roster MODELS (.glb) a neighbour's NPCs and wild creatures wear. Off on the headless
+## renderer: nothing is drawn there, and background-thread mesh loads race the dummy renderer's mesh
+## storage (spurious engine errors in tests). Tile scenes are prewarmed either way.
+var prewarm_models: bool = DisplayServer.get_name() != "headless"
 
 ## area id -> {"stage": Stage, "scenes": Array (threaded scene loads in flight), "listed": bool}.
 var _jobs: Dictionary = {}
@@ -187,12 +191,12 @@ func _step_scenes(story, area_id: String, job: Dictionary) -> void:
 				if not MapLoader.is_tile_scene_resolved(p):
 					paths[p] = true
 			# NPCs drawn with a roster model: their CharacterResource pulls the .glb in.
-			for e in area.entity_list():
+			for e in (area.entity_list() if prewarm_models else []):
 				var cid := String(e.visual_character)
 				if not cid.is_empty():
 					paths[CharacterLibrary.ROSTER_DIR + cid + ".tres"] = true
 			# Visible wild creatures stand on the map from the first frame: their species too.
-			for z in area.zones():
+			for z in (area.zones() if prewarm_models else []):
 				if not z.is_visible_mode():
 					continue
 				for entry in z.entries():

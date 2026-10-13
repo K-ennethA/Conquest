@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/fire/ember_eye_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"ember_eye"
+element = &"fire"
+element2 = &"radiant"
+display_name = "Pyroculus"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Firesprite pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/ember_eye.glb @ 586f2ce): PLACEHOLDER FOR REBALANCE. Stats cloned from firesprite.tres (Firesprite, the fire caster; element fire (flame-petal floating eye)); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): ember_eye_forge.glb.import root_scale 0.25866 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-11: 4 ft 5 in = 1.3462 m; floats; rest-pose lowest point at z 0) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
+; owner 2026-10-12 evolution Oculith -> Pyroculus: PLACEHOLDER stats scaled so the evolved form is ~1.25x its base form's power budget (an evolution must not be weaker; content validator).
+base_health = 91
+base_attack = 28
+base_defense = 11
+base_magic = 37
+base_magic_defense = 20
+base_speed = 22
+base_movement = 3
+attack_range = 3
+model_scale = 0.75104

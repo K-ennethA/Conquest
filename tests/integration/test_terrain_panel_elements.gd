@@ -165,7 +165,7 @@ func test_no_matchup_line_without_a_selection() -> void:
 func test_a_strong_matchup_states_the_arithmetic_and_tints_it() -> void:
 	var panel: TerrainInfoPanel = await _mount()
 	_place_effect(FIRE_TILE)
-	await _show(panel, _unit(&"nature"))
+	await _show(panel, _unit(&"plant"))
 
 	var row := _matchup(panel)
 	gut.p("matchup row : '%s' visible=%s" % [row.text, row.visible])
@@ -192,7 +192,7 @@ func test_a_resisted_matchup_is_tinted_in_the_players_favour() -> void:
 func test_a_neutral_matchup_renders_as_nothing() -> void:
 	var panel: TerrainInfoPanel = await _mount()
 	_place_effect(FIRE_TILE)
-	await _show(panel, _unit(&"holy"))
+	await _show(panel, _unit(&"radiant"))
 	assert_false(_matchup(panel).visible,
 		"fire and holy have no matchup, and the row's ABSENCE is the signal")
 
@@ -204,7 +204,7 @@ func test_a_neutral_matchup_renders_as_nothing() -> void:
 func test_the_row_follows_the_selection() -> void:
 	var panel: TerrainInfoPanel = await _mount()
 	_place_effect(FIRE_TILE)
-	var nature := _unit(&"nature")
+	var nature := _unit(&"plant")
 
 	await _show(panel, nature)
 	assert_true(_matchup(panel).visible, "selected: the row is up")
@@ -221,7 +221,7 @@ func test_the_quoted_damage_is_the_tiles_own_tick_number() -> void:
 	# DamageMath's chain on the same environment-marked move the tick builds.
 	var panel: TerrainInfoPanel = await _mount()
 	var fire := _place_effect(FIRE_TILE)
-	var nature := _unit(&"nature")
+	var nature := _unit(&"plant")
 	await _show(panel, nature)
 
 	var expected: int = fire.damage_preview_for(nature, CombatServices.board())
@@ -233,7 +233,7 @@ func test_the_quoted_damage_is_the_tiles_own_tick_number() -> void:
 func test_a_tile_that_deals_no_damage_quotes_none() -> void:
 	var panel: TerrainInfoPanel = await _mount()
 	_place_effect(GRASS_TILE)
-	await _show(panel, _unit(&"nature"))
+	await _show(panel, _unit(&"plant"))
 
 	var row := _matchup(panel)
 	gut.p("grass row   : '%s'" % row.text)
@@ -253,7 +253,7 @@ func test_a_tile_that_deals_no_damage_quotes_none() -> void:
 func test_the_meadow_announces_its_boosted_heal_in_the_players_favour() -> void:
 	var panel: TerrainInfoPanel = await _mount()
 	var meadow := _place_effect(MEADOW_TILE)
-	var nature := _unit(&"nature")
+	var nature := _unit(&"plant")
 	await _show(panel, nature)
 
 	var row := _matchup(panel)
@@ -277,7 +277,7 @@ func test_the_meadow_says_nothing_to_a_unit_it_does_not_favour() -> void:
 	# The reassignment's whole point: the meadow is NATURE, so holy gets no affinity.
 	var panel: TerrainInfoPanel = await _mount()
 	_place_effect(MEADOW_TILE)
-	await _show(panel, _unit(&"holy"))
+	await _show(panel, _unit(&"radiant"))
 	assert_false(_matchup(panel).visible,
 		"a holy unit has no relationship with the meadow, so the row stays away")
 
@@ -291,7 +291,7 @@ func test_the_boost_line_is_not_clipped_by_the_cards_width() -> void:
 	# that is the entire point of it. Measured on the rendered label.
 	var panel: TerrainInfoPanel = await _mount()
 	_place_effect(MEADOW_TILE)
-	await _show(panel, _unit(&"nature"))
+	await _show(panel, _unit(&"plant"))
 
 	var row := _matchup(panel)
 	var font: Font = row.get_theme_font("font")
@@ -309,7 +309,7 @@ func test_the_card_still_fits_its_cap_with_both_element_rows() -> void:
 	var panel: TerrainInfoPanel = await _mount()
 	_place_effect(FIRE_TILE)
 	_place_effect(GRASS_TILE)
-	await _show(panel, _unit(&"nature"))
+	await _show(panel, _unit(&"plant"))
 	panel._reflow_card()
 	await get_tree().process_frame
 
@@ -348,7 +348,7 @@ func test_the_chip_list_absorbs_the_extra_rows() -> void:
 			"res://game/tiles/effects/resources/rock_rubble.tres",
 			"res://game/tiles/effects/resources/fortify.tres"]:
 		_place_effect(path)
-	await _show(panel, _unit(&"nature"))
+	await _show(panel, _unit(&"plant"))
 	panel._reflow_card()
 	await get_tree().process_frame
 

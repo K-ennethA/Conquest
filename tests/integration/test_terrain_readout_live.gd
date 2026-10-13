@@ -196,7 +196,7 @@ func _mount_hover() -> Control:
 
 func test_the_fixture_grants_the_element_boosted_avoid_through_the_live_board() -> void:
 	# If this fails, every assertion below proves nothing: there would be no bonus to draw.
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var board = CombatServices.board()
 	assert_not_null(board, "the suite is running against a real BoardAdapter")
 	assert_eq(board.cell_of(unit), GRASS_CELL, "with the unit really standing on the grass")
@@ -209,7 +209,7 @@ func test_the_forecast_already_prices_the_boosted_terrain_avoid() -> void:
 	# TerrainStats.bonus_for(target, "evasion") -- with NO board argument, so it resolves the
 	# same live CombatServices the chip reads. Nothing had to be added for this; the point of
 	# the assertion is that the number the chip advertises is the number the card quotes.
-	var target := _board_with_unit(&"nature", GRASS_CELL)
+	var target := _board_with_unit(&"plant", GRASS_CELL)
 	var attacker := Unit.new()
 	attacker.character_resource = _character(&"fire")
 	_map_root.add_child(attacker)
@@ -234,7 +234,7 @@ func test_the_forecast_already_prices_the_boosted_terrain_avoid() -> void:
 # ==============================================================================
 
 func test_the_world_bar_wears_a_terrain_chip_with_the_real_number() -> void:
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var bar: Node3D = await _mount_bar(unit)
 
 	var labels: Array = _bar_terrain_labels(bar)
@@ -253,7 +253,7 @@ func test_the_world_chip_plate_is_wider_than_the_text_it_draws() -> void:
 	# THE recurring failure on this project's chips, stated as geometry. A plate narrower
 	# than its own string is a coloured smudge over the unit's head, and a string assertion
 	# cannot see it.
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var bar: Node3D = await _mount_bar(unit)
 
 	var plates: Array = _bar_terrain_plates(bar)
@@ -277,7 +277,7 @@ func test_the_font_the_world_chip_is_drawn_with_can_draw_the_terrain_mark() -> v
 	# THE TOFU PIN. A Label3D over the battlefield has NO font fallback at all, so a mark
 	# the theme font lacks is a literal box over every unit standing on terrain. This is why
 	# TerrainVisuals.MARK is a MEASURED choice and not a taste one.
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var bar: Node3D = await _mount_bar(unit)
 
 	var labels: Array = _bar_terrain_labels(bar)
@@ -303,7 +303,7 @@ func test_the_font_the_world_chip_is_drawn_with_can_draw_the_terrain_mark() -> v
 func test_walking_off_the_grass_takes_the_world_chip_away() -> void:
 	# The beat, end to end: GameEvents.unit_moved is what makes the chip appear the instant
 	# a unit steps into grass and vanish when it steps out.
-	var unit := _board_with_unit(&"nature", BARE_CELL)
+	var unit := _board_with_unit(&"plant", BARE_CELL)
 	var bar: Node3D = await _mount_bar(unit)
 	assert_true(_bar_terrain_labels(bar).is_empty(),
 		"a unit on bare earth wears nothing -- the row is exactly what it always was")
@@ -320,7 +320,7 @@ func test_a_terrain_chip_and_a_status_badge_are_told_apart_by_more_than_colour()
 	# They share one row, so if they shared a recipe the player would read "standing in
 	# grass" and "poisoned" as the same kind of fact. Terrain is a WIDE dark plate with
 	# coloured ink; a status is a SQUARE coloured chip with dark ink.
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var poison := StatusCondition.new()
 	poison.id = &"poisoned"
 	poison.display_name = "Poisoned"
@@ -355,7 +355,7 @@ func test_a_terrain_chip_and_a_status_badge_are_told_apart_by_more_than_colour()
 # ==============================================================================
 
 func test_the_live_card_shows_a_terrain_chip_the_moment_the_unit_walks_into_grass() -> void:
-	var unit := _board_with_unit(&"nature", BARE_CELL)
+	var unit := _board_with_unit(&"plant", BARE_CELL)
 	var layout: Control = await _build_hud()
 	await _select(unit)
 
@@ -380,7 +380,7 @@ func test_the_live_card_shows_a_terrain_chip_the_moment_the_unit_walks_into_gras
 
 
 func test_the_cards_terrain_chip_is_drawn_wide_enough_to_read() -> void:
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var layout: Control = await _build_hud()
 	await _select(unit)
 
@@ -401,7 +401,7 @@ func test_the_cards_terrain_chip_is_drawn_wide_enough_to_read() -> void:
 
 
 func test_the_cards_terrain_chip_elaborates_on_hover() -> void:
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var layout: Control = await _build_hud()
 	await _select(unit)
 
@@ -425,7 +425,7 @@ func test_the_terrain_chip_never_pushes_the_card_past_its_pinned_height() -> voi
 	# The card's height is PINNED (UnitInfoPanel.CARD_HEIGHT); the strip is two rows and
 	# terrain chips spend from the same slot budget statuses do. Worst realistic case:
 	# terrain plus a full complement of conditions.
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var controller = unit.get_status_controller()
 	for spec in [[&"poisoned", "Poisoned"], [&"burn", "Burn"],
 			[&"hastened", "Hastened"], [&"fortified", "Fortified"]]:
@@ -457,7 +457,7 @@ func test_the_terrain_chip_never_pushes_the_card_past_its_pinned_height() -> voi
 
 
 func test_a_unit_with_only_terrain_is_never_told_it_has_no_effects() -> void:
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var layout: Control = await _build_hud()
 	await _select(unit)
 
@@ -473,7 +473,7 @@ func test_a_unit_with_only_terrain_is_never_told_it_has_no_effects() -> void:
 # ==============================================================================
 
 func test_the_hover_card_carries_the_same_chip_and_names_the_terrain() -> void:
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var panel: Control = await _mount_hover()
 	panel.show_for_unit(unit)
 	for i in range(4):
@@ -496,7 +496,7 @@ func test_the_hover_card_carries_the_same_chip_and_names_the_terrain() -> void:
 
 
 func test_the_hover_card_drops_the_chip_when_the_unit_walks_out_of_the_grass() -> void:
-	var unit := _board_with_unit(&"nature", GRASS_CELL)
+	var unit := _board_with_unit(&"plant", GRASS_CELL)
 	var panel: Control = await _mount_hover()
 	panel.show_for_unit(unit)
 	for i in range(4):

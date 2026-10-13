@@ -47,7 +47,7 @@ func test_kos_do_not_count_in_the_shipped_rules() -> void:
 func test_one_member_is_awarded_once_per_battle() -> void:
 	var rows := [{ "uid": "tree_grunt", "alive": true, "kos": 0 }, { "uid": "tree_grunt", "alive": true, "kos": 0 }]
 	assert_eq(GrowthTracker.compute_awards(rows, true, _rules()), { "tree_grunt": 1 },
-		"two units of the same member (e.g. Barkling and Oakheart both fielded) earn one award")
+		"two units of the same member (e.g. Barkling and Cinderbark both fielded) earn one award")
 
 
 func test_gates() -> void:

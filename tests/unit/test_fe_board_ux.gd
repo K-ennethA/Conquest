@@ -61,7 +61,7 @@ func test_matchup_chips_effectiveness_and_height() -> void:
 	var d := MockUnit.new()
 	autofree(a)
 	autofree(d)
-	d.element = ElementChart.NATURE
+	d.element = ElementChart.PLANT
 	a.position = Cells.cell_to_world(Vector3i(1, 1, 1))
 	d.position = Cells.cell_to_world(Vector3i(2, 1, 0))
 	var board := BoardAdapter.new(grid, [a, d])

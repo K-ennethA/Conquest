@@ -13,6 +13,13 @@ extends SceneTree
 ##   game/overworld/content/areas/deepwood_village/    -- THE DEEP WOODS: Nyra's clan village
 ##   game/overworld/content/areas/depths_of_the_wood{,_2,_3,_4}/ -- the MAZE north of it (Lost Woods rooms)
 ##   game/overworld/content/areas/depths_of_the_wood_heart/  -- the clearing at its end: Eldroot
+##   game/overworld/content/areas/beach_village/             -- THE COAST: Eloi (the sea move), Cael
+##   game/overworld/content/areas/frostpeak_village/, frostpeak_dream/ (+ frostpeak_inn, frostpeak_house)
+##                                                           -- THE PEAKS: the sleeping town and its dream
+##   game/overworld/content/areas/rocky_badlands/, redrock_village/, red_desert/, badlands_cave/,
+##     badlands_hideout{,_depths}/                           -- THE BADLANDS: the rumours, the cave, the hideout
+##   game/overworld/content/battles/ow_frostpeak_dream.tres  -- the two mythical creatures (tactical)
+##   game/overworld/content/battles/ow_badlands_hideout.tres -- the hideout's last fight (tactical)
 ##   game/overworld/content/world.tres                       -- the WORLD MAP registry (WorldAtlas)
 ##   game/overworld/content/battles/ow_oakvale_ashes.tres    -- the FIRST FIGHT (tactical)
 ##   game/overworld/content/battles/ow_deepwood_glade.tres   -- Eldroot's legend battle (tactical)
@@ -175,6 +182,38 @@ const NAMES := {
 	"TRAPPER": "Trapper",
 	# TODO(story): PLACEHOLDER name of the tree-felling field move Nyra teaches (DECISIONS.md #40/#41).
 	"FIELD_MOVE_TREES": "Treefell",
+	# --- The Sunlit Coast: Beach Village (DECISIONS.md #43 / #85 / #88) ---
+	"ELOI": "Eloi",                         # owner: the sea chief (docs/design/characters/eloi.webp; "his people")
+	# TODO(story): PLACEHOLDER name of the sea-crossing field move Eloi teaches (DECISIONS.md #41 / #43).
+	"FIELD_MOVE_SEA": "Tideride",
+	# Generic villagers (no named cast -- one short placeholder line each in dialogue.json).
+	"BEACH_FISHER": "Fisher",
+	"NET_MENDER": "Net Mender",
+	"HARBOUR_HAND": "Harbour Hand",
+	"BEACH_CHILD": "Beach Child",
+	# --- The Snowy Peaks: Frostpeak Village (DECISIONS.md #49 / #69 / #85 / #95) ---
+	"SAEVI": "Saevi",                       # owner: the winter chief (docs/design/characters/saevi.webp; "her people")
+	"FROST_INNKEEPER": "Innkeeper",
+	"FROST_TRAVELLER": "Traveller",
+	"FROST_ELDER": "Frostpeak Elder",
+	"FROST_HUNTER": "Frostpeak Hunter",
+	"FROST_WATCH": "Trail Watch",
+	"FROST_WOODCUTTER": "Woodcutter",
+	"FROST_CHILD": "Frostpeak Child",
+	"FROST_SLEEPER": "Villager",
+	# --- The Rocky Badlands: Redrock Village, the Red Desert, the hideout (DECISIONS.md #46 / #57 / #73 / #96) ---
+	"REDROCK_ELDER": "Redrock Elder",
+	"REDROCK_MINER": "Miner",
+	"REDROCK_TRADER": "Caravan Trader",
+	"REDROCK_WATCH": "Mesa Watch",
+	"REDROCK_CHILD": "Redrock Child",
+	"BADLANDS_PROSPECTOR": "Prospector",
+	# TODO(story): generic PLACEHOLDER people of the secret hideout -- who they serve is the owner's call.
+	"HOODED_FIGURE": "Hooded Figure",
+	"HIDEOUT_GUARD": "Hideout Guard",
+	"HIDEOUT_COMMANDER": "Hideout Commander",
+	# --- The post-game (DECISIONS.md #98-#100) ---
+	"GRAVEKEEPER": "Gravekeeper",           # Crownhaven Graveyard (a generic placeholder; no named cast)
 }
 
 ## WOMEN among the NPCs (NAMES keys, or the literal name an _npc call passes): they wear the FEMALE
@@ -187,6 +226,7 @@ const FEMALE_NPCS := {
 	"WARRIOR": "Talyn, female (owner 2026-10-04; DECISIONS.md #59)",
 	"LYRA": "she / her (Lyra's scripts here; dialogue.json areas.crownhaven.lyra note)",
 	"NYRA": "she is the Deepwood chief (Nyra's lodge, below)",
+	"SAEVI": "'respected by her people' (docs/design/characters/saevi.webp)",
 	"MARRA": "title Goodwife; 'the Hearth & Hen's landlady on her scorched plot'",
 	"ODALYS": "title Sister",
 	"FERRA": "title Huntress",
@@ -238,25 +278,41 @@ const WORLD_LOCATIONS := [
 		"A cave below Woodland Town that nobody admits to knowing."],
 	["deepwood_village", "Deepwood Village", "village", "woodlands", Vector2(0.098, 0.474), ["deepwood_village"], "world.deepwood_open", false,
 		"A village deep in the old forest, west of Woodland Town."],
-	["depths_of_the_wood", "Depths of the Wood", "special", "woodlands", Vector2(0.114, 0.337), ["depths_of_the_wood", "depths_of_the_wood_2", "depths_of_the_wood_3", "depths_of_the_wood_4", "depths_of_the_wood_heart"], "world.depths_of_the_wood_open", false,
+	["depths_of_the_wood", "Depths of the Wood", "special", "woodlands", Vector2(0.114, 0.337), ["depths_of_the_wood", "depths_of_the_wood_2", "depths_of_the_wood_3", "depths_of_the_wood_4", "depths_of_the_wood_lost", "depths_of_the_wood_heart"], "world.depths_of_the_wood_open", false,
 		"A maze of old forest north of Deepwood, with a glowing glade at its heart. A special encounter."],
-	["frostpeak_village", "Frostpeak Village", "village", "snowy_peaks", Vector2(0.231, 0.166), [], "world.frostpeak_open", false,
+	["frostpeak_village", "Frostpeak Village", "village", "snowy_peaks", Vector2(0.231, 0.166), ["frostpeak_village", "frostpeak_dream"], "world.frostpeak_open", false,
 		"A village under the Snowy Peaks, up the north trail from Woodland Town."],
 	["mountain_base", "Mountain Base", "town", "northern_mountains", Vector2(0.693, 0.188), [], "world.mountain_road_open", false,
 		"The fortified town at the foot of the mountains, up the road from Crownhaven's north gate."],
 	["mountain_pass", "Mountain Pass", "route", "northern_mountains", Vector2(0.668, 0.080), [], "world.mountain_pass_open", false,
 		"The high pass over the mountains toward Cindral."],
-	["hidden_depths", "Hidden Depths", "special", "northern_mountains", Vector2(0.850, 0.137), [], "world.hidden_depths_open", false,
+	["hidden_depths", "Hidden Depths", "special", "northern_mountains", Vector2(0.850, 0.137), ["hidden_depths", "hidden_depths_2", "hidden_depths_3", "hidden_depths_heart"], "world.hidden_depths_open", false,
 		"A crystal cave in the eastern mountains. A special encounter."],
 	["cindral", "Cindral", "nation", "cindral", Vector2(0.761, 0.045), [], "world.cindral_open", false,
 		"The Other Nation, beyond the Mountain Pass."],
-	["redrock_village", "Redrock Village", "village", "rocky_badlands", Vector2(0.856, 0.410), [], "world.badlands_open", false,
+	["rocky_badlands", "Rocky Badlands", "route", "rocky_badlands", Vector2(0.665, 0.398), ["rocky_badlands"], "world.badlands_open", false,
+		"The Redrock road east from Crownhaven's east gate, through the red mesas."],
+	["redrock_village", "Redrock Village", "village", "rocky_badlands", Vector2(0.856, 0.410), ["redrock_village"], "world.badlands_open", false,
 		"A village among the red mesas, down the road from Crownhaven's east gate."],
-	["beach_village", "Beach Village", "village", "sunlit_coast", Vector2(0.678, 0.685), [], "world.beach_road_open", false,
+	["red_desert", "The Red Desert", "route", "rocky_badlands", Vector2(0.800, 0.492), ["red_desert", "badlands_cave"], "world.badlands_open", false,
+		"Sand and red rock south of Redrock Village, where travellers say strange people come and go."],
+	["secret_hideout", "Secret Hideout", "dungeon", "rocky_badlands", Vector2(0.772, 0.532), ["badlands_hideout", "badlands_hideout_depths"], "badlands.hideout_open", true,
+		"A hideout dug behind a dead-end cave in the Red Desert."],
+	["stormreef_waters", "Stormreef Waters", "route", "open_ocean", Vector2(0.645, 0.800), ["stormreef_waters", "stormreef_waters_erupted", "volcano_path", "volcano_crater"], "", false,
+		"The open sea south of Beach Village, off Stormreef Isle."],
+	["snowy_peaks", "The Snowy Peaks", "route", "snowy_peaks", Vector2(0.262, 0.105), ["snowy_peaks"], "", false,
+		"The high trail into the peaks north of Frostpeak Village."],
+	["frozen_cave", "Frozen Cave", "special", "snowy_peaks", Vector2(0.300, 0.075), ["glacier_cave", "glacier_cave_2", "glacier_cave_3"], F_POSTGAME, true,
+		"A cave on the Snowy Peaks, long sealed by ice. A special encounter."],
+	["crownhaven_graveyard", "Crownhaven Graveyard", "route", "heartlands", Vector2(0.455, 0.372), ["crownhaven_graveyard"], "", false,
+		"The graveyard on Crownhaven's outskirts, beyond the west gate."],
+	["old_crypt", "The Old Crypt", "dungeon", "heartlands", Vector2(0.448, 0.352), ["old_crypt", "old_crypt_depths", "old_crypt_end"], F_FINAL_BOSS, true,
+		"A crypt below Crownhaven's graveyard."],
+	["beach_village", "Beach Village", "village", "sunlit_coast", Vector2(0.678, 0.685), ["beach_village"], "world.beach_road_open", false,
 		"A harbour village on stilts, south-east of the capital: the port for the isles."],
 	["sunrise_isle", "Sunrise Isle", "island", "open_ocean", Vector2(0.910, 0.615), [], "world.sea_routes_open", false,
 		"An island to the east, a short sail from Beach Village."],
-	["island_of_tides", "Island of Tides", "special", "open_ocean", Vector2(0.850, 0.810), [], "world.sea_routes_open", false,
+	["island_of_tides", "Island of Tides", "special", "open_ocean", Vector2(0.850, 0.810), ["island_of_tides", "tides_cave_1", "tides_pocket", "tides_cave_2", "tides_cave_3", "tides_depths"], "", false,
 		"A storm-wrapped island far out to sea. A special encounter."],
 	["stormreef_isle", "Stormreef Isle", "island", "open_ocean", Vector2(0.608, 0.915), [], "world.sea_routes_open", false,
 		"A reef island south of Beach Village."],
@@ -271,7 +327,10 @@ const WORLD_ROADS := [
 	["crownhaven", "mountain_base", "main"],
 	["mountain_base", "mountain_pass", "main"],
 	["mountain_pass", "cindral", "main"],
-	["crownhaven", "redrock_village", "main"],
+	["crownhaven", "rocky_badlands", "main"],
+	["rocky_badlands", "redrock_village", "main"],
+	["redrock_village", "red_desert", "secondary"],
+	["red_desert", "secret_hideout", "secondary"],
 	["crownhaven", "beach_village", "main"],
 	["river_crossing", "beach_village", "main"],
 	["oakvale", "farm_hamlet", "secondary"],
@@ -282,7 +341,13 @@ const WORLD_ROADS := [
 	["mountain_base", "hidden_depths", "secondary"],
 	["beach_village", "sunrise_isle", "sea"],
 	["beach_village", "island_of_tides", "sea"],
-	["beach_village", "stormreef_isle", "sea"],
+	["beach_village", "stormreef_waters", "sea"],
+	["stormreef_waters", "stormreef_isle", "sea"],
+	["frostpeak_village", "snowy_peaks", "secondary"],
+	["snowy_peaks", "frozen_cave", "secondary"],
+	["sparse_forest", "crownhaven_graveyard", "secondary"],
+	["crownhaven_graveyard", "old_crypt", "secondary"],
+	["stormreef_waters", "island_of_tides", "sea"],
 ]
 
 ## Shop ids (the save keys of their stock -- never rename once shipped; the NAMES above are free).
@@ -317,7 +382,7 @@ const GENERAL_UNIT := "varden"
 const WARRIOR_UNIT := "vineweave"
 ## PLACEHOLDER enemy units for the first fight (existing roster units): the soldiers first, then
 ## their creatures. In map-spawn order (see [method _build_first_fight_map]).
-const RAIDER_UNITS: Array[String] = ["undead", "undead", "blightcap", "monster"]
+const RAIDER_UNITS: Array[String] = ["tree_grunt", "petalfang", "blightcap", "monster"]
 ## PLACEHOLDER creatures beside the fellow testers at the ceremony (DECISIONS.md #52): existing
 ## roster units, purely visual. [tester entity id, cell, its creature's entity id, cell, character_id]
 const CEREMONY_TESTERS: Array = [
@@ -430,6 +495,13 @@ const TILE_TYPES := {
 	"sacred_ground": "SACRED_GROUND",
 	"stone_wall": "WALL",
 	"deep_water": "WATER",
+	"sand": "NORMAL",
+	"red_clay": "NORMAL",
+	"mesa_rock": "WALL",
+	"snow_field": "DIFFICULT_TERRAIN",
+	"frozen_tundra": "NORMAL",
+	"frozen_pine": "WALL",
+	"ice_sheet": "ICE",
 }
 
 var _ok: bool = true
@@ -439,6 +511,10 @@ func _initialize() -> void:
 	for d in ["areas/oakvale", "areas/oakvale_ruins", "areas/mossway", "areas/river_crossing", "areas/crownhaven",
 			"areas/sparse_forest", "areas/woodland_town", "areas/deepwood_village", "areas/depths_of_the_wood",
 			"areas/depths_of_the_wood_2", "areas/depths_of_the_wood_3", "areas/depths_of_the_wood_4", "areas/depths_of_the_wood_heart",
+			"areas/beach_village", "areas/frostpeak_village", "areas/frostpeak_dream", "areas/rocky_badlands",
+			"areas/redrock_village", "areas/red_desert", "areas/badlands_cave", "areas/badlands_hideout",
+			"areas/badlands_hideout_depths", "areas/stormreef_waters", "areas/stormreef_waters_erupted", "areas/snowy_peaks",
+			"areas/glacier_cave", "areas/crownhaven_graveyard", "areas/old_crypt",
 			"battles", "shops", "tournaments", "field_moves"]:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + d))
 	_build_world()
@@ -450,6 +526,12 @@ func _initialize() -> void:
 	_build_battle_map()
 	_build_first_fight_map()
 	_build_eldroot_map()
+	_build_dream_battle_map()
+	_build_hideout_battle_map()
+	_build_glacier_map()
+	_build_crypt_map()
+	_build_depths_boss_map()
+	_build_tides_map()
 	_build_oakvale(false)
 	_build_oakvale(true)
 	_build_mossway()
@@ -459,6 +541,24 @@ func _initialize() -> void:
 	_build_woodland_town()
 	_build_deepwood_village()
 	_build_depths_of_the_wood()
+	_build_beach_village()
+	_build_frostpeak(false)
+	_build_frostpeak(true)
+	_build_rocky_badlands()
+	_build_redrock_village()
+	_build_red_desert()
+	_build_badlands_cave()
+	_build_hideout()
+	_build_hideout_depths()
+	_build_stormreef_waters(false)
+	_build_stormreef_waters(true)
+	_build_snowy_peaks()
+	_build_glacier_cave()
+	_build_graveyard()
+	_build_crypt()
+	_build_volcano()
+	_build_hidden_depths()
+	_build_island_of_tides()
 	print("[build_story_content] %s" % ("done" if _ok else "FAILED"))
 	quit(0 if _ok else 1)
 
@@ -531,6 +631,26 @@ func _closed_road(id: String, rect: Rect2i, location_id: String, back_area: Stri
 	var flag: String = String(row[6]) if not row.is_empty() else "world.never"
 	return _warp(id, rect, back_area, back_entry, "", "has(\"%s\")" % flag,
 		_scene("%s_road_locked_%s" % [location_id, id], [_narr(text)]))
+
+
+## A road OUT to a place that is now BUILT: a warp to [param target_area] / [param target_entry]
+## held by that place's open flag (WORLD_LOCATIONS), answering with [param text] until it is set.
+func _road_out(id: String, rect: Rect2i, location_id: String, target_area: StringName, target_entry: StringName,
+		text: String) -> WarpEntity:
+	var row: Array = _world_row(location_id)
+	var flag: String = String(row[6]) if not row.is_empty() else "world.never"
+	return _warp(id, rect, target_area, target_entry, "", "has(\"%s\")" % flag,
+		_scene("%s_road_locked_%s" % [location_id, id], [_narr(text)]))
+
+
+## The silent on_enter that opens the regions' roads ([param flags]) once [constant
+## REGION_ROADS_OPEN_IF] holds -- set by the town the road leaves from, so a journey saved before
+## these regions were built opens them on its next visit.
+func _open_region_roads(flags: Array) -> Array:
+	var out: Array = []
+	for f in flags:
+		out.append(IfCommand.make("(%s) and not has(\"%s\")" % [REGION_ROADS_OPEN_IF, f], [_flag(String(f))]))
+	return out
 
 
 func _save(res: Resource, path: String) -> void:
@@ -991,6 +1111,11 @@ const INTERIORS := {
 		"forge": {"id": "woodland_forge", "name": "Woodland Smithy", "size": Vector2i(8, 6), "floor": "flagstones"},
 		"herb_hut": {"id": "woodland_herb_hut", "name": "The Herb Hut", "size": Vector2i(8, 6)},
 	},
+	# The sleeping town (DECISIONS.md #95): the inn's beds (you must rest there) and a house of sleepers.
+	"frostpeak_village": {
+		"fp_inn": {"id": FP_INN_ID, "name": "Frostpeak Inn", "size": Vector2i(10, 7)},
+		"fp_house": {"id": FP_HOUSE_ID, "name": "Frostpeak House", "size": Vector2i(8, 6)},
+	},
 }
 
 
@@ -1107,6 +1232,7 @@ func _build_interior(town: OverworldAreaResource, p: PropEntity, spec: Dictionar
 	a.level_band = town.level_band
 	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % iid)
 	a.entry_points = {"door": {"cell": [door_x, h - 2, 0], "facing": "north"}}
+	a.entry_points.merge(_interior_entries(iid))
 	var ents: Array = []
 	ents.append(_prop("exit_mat", "mat", Vector2i(door_x, h - 1), Vector2i.ONE, Color(0.62, 0.22, 0.18)))
 	ents.append(_warp("exit", Rect2i(door_x, h - 1, 1, 1), town.area_id, StringName(DoorEntity.entry_id_for(String(p.id)))))
@@ -1124,7 +1250,21 @@ func _interior_people(iid: String, size: Vector2i, door_x: int) -> Array:
 	match iid:
 		"crownhaven_workshop":
 			return _workshop_people(size, door_x)
+		FP_INN_ID:
+			return _fp_inn_people(size)
+		FP_HOUSE_ID:
+			return _fp_house_people()
 	return []
+
+
+## Extra entry points of interior [param iid] (per-building override; just the door by default).
+func _interior_entries(iid: String) -> Dictionary:
+	match iid:
+		FP_INN_ID:
+			# Waking from the dream: beside the first empty bed, facing it.
+			var bx: int = int(FP_INN_BEDS[0][1])
+			return {"bed": {"cell": [bx, 3, 0], "facing": "north"}}
+	return {}
 
 
 ## Scripts run when interior [param iid] loads (per-building override).
@@ -1943,14 +2083,17 @@ func _build_river_crossing() -> void:
 
 	ents.append(_warp("west_exit", Rect2i(0, RC_ROAD_Y, 1, 1), &"mossway", &"east"))
 	ents.append(_warp("north_exit", Rect2i(RC_BRIDGE_X0, 0, 2, 1), &"crownhaven", &"south_gate"))
-	ents.append(_closed_road("east_exit", Rect2i(RC_W - 1, RC_ROAD_Y, 1, 1), "beach_village", &"river_crossing", &"east_road",
+	ents.append(_road_out("east_exit", Rect2i(RC_W - 1, RC_ROAD_Y, 1, 1), "beach_village", &"beach_village", &"west_road",
 		"The coast road east toward Beach Village and the sea dips into a ford -- and the ford has become a lake. A Warden's rope and a painted board: \"Road closed. Ferry suspended. Ask again after the rains.\""))
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
-	# No arrival narration (the location popup names the village); the flag is set silently.
-	a.on_enter = StoryCommand.list([
+	# No arrival narration (the location popup names the village); the flag is set silently -- and so is
+	# the coast road's, once the opening is over.
+	var on_enter: Array = [
 		IfCommand.make("not has(\"river_crossing.arrived\")", [_flag("river_crossing.arrived")]),
-	])
+	]
+	on_enter.append_array(_open_region_roads([F_BEACH_ROAD_OPEN]))
+	a.on_enter = StoryCommand.list(on_enter)
 	_save(a, CONTENT + "areas/river_crossing/area.tres")
 
 
@@ -2135,17 +2278,22 @@ func _build_crownhaven() -> void:
 	# The roads the map shows but the story has not built yet: closed, each with its own excuse.
 	ents.append(_closed_road("north_exit", Rect2i(CH_NORTH_GATE.x, 0, 1, 1), "mountain_base", &"crownhaven", &"north_gate",
 		"The Mountain Road climbs north toward Mountain Base and the Pass beyond. A Royal Guard shakes his head. \"Closed by order of the crown. Landslides, they say. Soldiers, I say.\""))
-	ents.append(_closed_road("east_exit", Rect2i(CH_W - 1, CH_EAST_GATE.y, 1, 1), "redrock_village", &"crownhaven", &"east_gate",
+	# The Redrock road (the Rocky Badlands) and the coast road (Beach Village): open once the opening is
+	# over ([constant REGION_ROADS_OPEN_IF]); until then the old excuses answer.
+	ents.append(_road_out("east_exit", Rect2i(CH_W - 1, CH_EAST_GATE.y, 1, 1), "redrock_village", &"rocky_badlands", &"west_road",
 		"The Redrock road runs east into the red mesas of the Rocky Badlands. A chain hangs across it, and a notice: \"No caravans until the Badlands road is cleared of rockfalls. By order of the Guildhall.\""))
-	ents.append(_closed_road("harbour_exit", Rect2i(CH_W - 1, CH_HARBOUR_GATE.y, 1, 1), "beach_village", &"crownhaven", &"harbour_gate",
+	ents.append(_road_out("harbour_exit", Rect2i(CH_W - 1, CH_HARBOUR_GATE.y, 1, 1), "beach_village", &"beach_village", &"north_road",
 		"The coast road slopes south-east toward Beach Village and the harbour. The gate warden waves you back: \"Ford's flooded below the city. Nothing's getting to the coast this week.\""))
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
 	# No arrival narration: the location popup names the city, and nothing stops the hero's walk. The flag
-	# is still set (quests and ambient talk key off "has been to Crownhaven"), silently.
-	a.on_enter = StoryCommand.list([
+	# is still set (quests and ambient talk key off "has been to Crownhaven"), silently -- as are the roads
+	# out to the coast and the badlands once the opening is over.
+	var on_enter: Array = [
 		IfCommand.make("not has(\"%s\")" % F_ARRIVED, [_flag(F_ARRIVED)]),
-	])
+	]
+	on_enter.append_array(_open_region_roads([F_BEACH_ROAD_OPEN, F_BADLANDS_OPEN]))
+	a.on_enter = StoryCommand.list(on_enter)
 	_save(a, CONTENT + "areas/crownhaven/area.tres")
 
 
@@ -2463,7 +2611,8 @@ func _raid() -> Array:
 func _general_in_crownhaven() -> NpcEntity:
 	var general := _npc("general", Vector2i(7, 9), "south", "GENERAL", ALDERMERE_BLUE, "officer")
 	general.visual_character = VARDEN_MODEL
-	general.visible_if = "has(\"%s\")" % F_COMPLETE
+	# Not while he is in the Red Desert's hideout (one General at a time, #57).
+	general.visible_if = "has(\"%s\") and not (%s)" % [F_COMPLETE, VARDEN_IN_HIDEOUT]
 	general.on_interact = StoryCommand.list([
 		IfCommand.make("not has(\"%s\")" % F_ACT1_MET, [
 			_say([
@@ -2598,7 +2747,7 @@ func _fenna() -> TrainerEntity:
 	# A small TEAM (party duels: the story format fields your lead + up to 2 bench), kept weak --
 	# she is the first trainer on the road.
 	var spec := _duel_spec("", "{FENNA}", &"npc_fenna", [{"character_id": "petalfang", "strength": 0.85},
-			{"character_id": "undead", "strength": 0.7}],
+			{"character_id": "tree_grunt", "strength": 0.7}],
 		false, BattleSpec.DefeatPolicy.WHITEOUT, 90)
 	spec.enemy_level = LV_FENNA
 	spec.clash_intro = true
@@ -2823,8 +2972,8 @@ func _build_tournaments() -> void:
 	var entrants := [
 		["{TAMSIN}", "npc_tamsin", [["mycothrall", 0.9]]],
 		["{HARL}", "npc_harl", [["blightcap", 0.95], ["tree_grunt", 0.8]]],
-		["{QUENBY}", "npc_quenby", [["petalfang", 1.05], ["undead", 0.85]]],
-		["{CHAMPION}", "npc_isolde", [["oakheart", 0.85], ["monster", 0.8], ["blightcap", 0.8]]],
+		["{QUENBY}", "npc_quenby", [["petalfang", 1.05], ["mycothrall", 0.85]]],
+		["{CHAMPION}", "npc_isolde", [["vineweave", 0.85], ["monster", 0.8], ["blightcap", 0.8]]],
 	]
 	var rounds: Array[BattleSpec] = []
 	for i in range(entrants.size()):
@@ -2868,7 +3017,7 @@ func _arena() -> Array:
 	var champ := _npc("isolde", CH_CHAMPION, "south", "CHAMPION", Color(0.85, 0.7, 0.3), "noble")
 	champ.visible_if = "has(\"%s\")" % CUP_TITLE_FLAG
 	var spec := _duel_spec(CHAMPION_REMATCH_ID, "{CHAMPION}", &"npc_isolde",
-		[{"character_id": "oakheart", "strength": 0.9}, {"character_id": "monster", "strength": 0.85},
+		[{"character_id": "vineweave", "strength": 0.9}, {"character_id": "monster", "strength": 0.85},
 			{"character_id": "petalfang", "strength": 0.85}], true, BattleSpec.DefeatPolicy.CONTINUE, 120)
 	spec.enemy_level = LV_CHAMPION_REMATCH
 	spec.clash_intro = true
@@ -2915,6 +3064,8 @@ const SF_ROAD_Y := 6
 const SF_GRASS := [Rect2i(3, 2, 4, 3), Rect2i(10, 7, 5, 3), Rect2i(17, 2, 5, 3), Rect2i(22, 8, 4, 2)]
 ## Kept clear of the scatter trees (the signs, the woodsman, his logs and the ground around them).
 const SF_CLEAR := [Rect2i(1, 4, 3, 3), Rect2i(23, 4, 4, 3), Rect2i(13, 2, 4, 3)]
+## The path north to Crownhaven Graveyard (off the road, just outside the city's west gate).
+const SF_GRAVEYARD_X := 24
 
 
 func _sf_path_y(x: int) -> int:
@@ -2929,6 +3080,9 @@ func _sf_path_y(x: int) -> int:
 
 func _sf_terrain(x: int, y: int) -> String:
 	var c := Vector2i(x, y)
+	# The path north to the graveyard on Crownhaven's outskirts (DECISIONS.md #100).
+	if x == SF_GRAVEYARD_X and y < SF_ROAD_Y:
+		return "forest_dirt"
 	if y <= 1 or y >= SF_H - 1:
 		return "tree"
 	if x == 0 or x == SF_W - 1:
@@ -2965,6 +3119,7 @@ func _build_sparse_forest() -> void:
 	a.entry_points = {
 		"west": {"cell": [1, SF_ROAD_Y, 0], "facing": "east"},
 		"east": {"cell": [SF_W - 2, SF_ROAD_Y, 0], "facing": "west"},
+		"graveyard_path": {"cell": [SF_GRAVEYARD_X, 1, 0], "facing": "south"},
 	}
 	var ents: Array = []
 	ents.append(_sign("west_sign", Vector2i(2, SF_ROAD_Y - 1), "The Sparse Forest",
@@ -2976,6 +3131,7 @@ func _build_sparse_forest() -> void:
 	ents.append(_npc("alder", Vector2i(15, 3), "south", "WOODSMAN", Color(0.4, 0.46, 0.28), "villager"))
 	ents.append(_warp("west_exit", Rect2i(0, SF_ROAD_Y, 1, 1), &"woodland_town", &"east_road"))
 	ents.append(_warp("east_exit", Rect2i(SF_W - 1, SF_ROAD_Y, 1, 1), &"crownhaven", &"west_gate"))
+	ents.append(_warp("graveyard_exit", Rect2i(SF_GRAVEYARD_X, 0, 1, 1), &"crownhaven_graveyard", &"south_gate"))
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
 
@@ -3113,7 +3269,7 @@ func _build_woodland_town() -> void:
 	# trail (Frostpeak Village) and the south trail (the Hidden Thieves Guild) are the next chapters --
 	# their warps target this town and never open yet.
 	ents.append(_warp("east_exit", Rect2i(WT_W - 1, WT_ROAD_Y, 1, 1), &"sparse_forest", &"west"))
-	ents.append(_closed_road("north_exit", Rect2i(WT_NORTH_X, 0, 1, 1), "frostpeak_village", &"woodland_town", &"north_trail",
+	ents.append(_road_out("north_exit", Rect2i(WT_NORTH_X, 0, 1, 1), "frostpeak_village", &"frostpeak_village", &"south_trail",
 		"The trail north climbs out of the pines toward the snowline, where Frostpeak Village sits under the Snowy Peaks. A Warden's chain is drawn across it, hung with a frosted board: \"High trail closed -- snow. Open at the thaw.\""))
 	# The west road to Deepwood Village (the Deep Woods, built below): held by the Wardens' rope until
 	# Warden Hale opens it ([method _wt_people]: talk to him at the Lodge).
@@ -3128,10 +3284,12 @@ func _build_woodland_town() -> void:
 	_add_doors(a, ents)
 	a.entities = _entities(ents)
 	# No arrival narration (the location popup names the town); the flag is set silently (ambient
-	# talk keys off "rests since arriving").
-	a.on_enter = StoryCommand.list([
+	# talk keys off "rests since arriving") -- as is the north trail's, once the opening is over.
+	var on_enter: Array = [
 		IfCommand.make("not has(\"woodland.arrived\")", [_flag("woodland.arrived")]),
-	])
+	]
+	on_enter.append_array(_open_region_roads([F_FROSTPEAK_OPEN]))
+	a.on_enter = StoryCommand.list(on_enter)
 	_save(a, CONTENT + "areas/woodland_town/area.tres")
 
 
@@ -3251,7 +3409,8 @@ func _wt_people() -> Array:
 #     -> beating NYRA opens the trail north (world.depths_of_the_wood_open: "to go through the forest
 #        the hero must first fight Nyra") and she TEACHES the tree-felling FIELD MOVE (#40 / #92): one
 #        eligible party member LEARNS it (fieldmove.treefell = teachable; the member record keeps it).
-#     -> THE DEPTHS OF THE WOOD: a MAZE (#93) of look-alike rooms -- follow the lights; the wrong ways
+#     -> THE DEPTHS OF THE WOOD: a MAZE (#93) of look-alike rooms -- follow the deepest roots and the
+#        greatest trees (#101); a wrong way leads into a thicket of tough wild creatures; the wrong ways
 #        turn you back to the entrance; BREAKABLE TREES (FieldObstacleEntity) block the right way, so
 #        the move is required. Tall grass, optional trainers, chests.
 #     -> THE HEART OF THE WOOD: the clearing where ELDROOT waits: a TACTICAL legend battle (#74), FIXED
@@ -3292,14 +3451,14 @@ const F_TREEFELL_LEARNED := "deepwood.treefell_learned"
 ## journey has a learner) and the humans (character ids: the hero's unit "wren"; add "lyra" to let the
 ## Deepwood rival learn it too -- left out, since a guest leaves the party after the Eldroot battle).
 const FIELD_MOVE_TREES_ID := "treefell"
-const FIELD_MOVE_TREES_SPECIES: Array[String] = ["tree_grunt", "oakheart", "vineweave", "petalfang", "blightcap"]
+const FIELD_MOVE_TREES_SPECIES: Array[String] = ["tree_grunt", "vineweave", "petalfang", "blightcap"]
 const FIELD_MOVE_TREES_HUMANS: Array[String] = ["wren"]
 
 ## NYRA, the Deepwood chief (DECISIONS.md #85): a DUEL (#50), SCALED inside the Deep Woods band (#80)
 ## at this offset from the party's top level. PLACEHOLDER team (nature roster creatures; Eldroot is
 ## the legend, never hers) -- her FINAL creature is the one she uses the stone with (#38 / #67).
 const NYRA_SCALE_OFFSET := 1
-const NYRA_TEAM: Array[String] = ["petalfang", "vineweave", "oakheart"]
+const NYRA_TEAM: Array[String] = ["petalfang", "vineweave", "blightcap"]
 ## TODO(bond): stone boost -- the bond / stone system is not built (#38 / #65 / #67). Until it is, her
 ## FINAL creature gets this small authored strength bump (the duel's stat multiplier).
 const NYRA_STONE_BOOST := 1.15
@@ -3344,6 +3503,7 @@ func _build_field_moves() -> void:
 	fm.used_text = "{user} used {move}!"
 	fm.learned_text = "{user} learned {move}!"
 	_save(fm, FieldMoveResource.path_for(FIELD_MOVE_TREES_ID))
+	_build_sea_move()
 
 
 ## A BREAKABLE TREE at [param cell] of area [param area_id] (DECISIONS.md #40): gone for good once felled.
@@ -3534,16 +3694,30 @@ func _nyra() -> NpcEntity:
 ## says to come back with one who can -- the move stays teachable. [param again] = a later visit
 ## (she offers it to another member, or just says her idle line). TODO(story): placeholder lines.
 func _nyra_teach(again: bool) -> Array:
-	var cond_can: String = "can_learn_field_move(\"%s\")" % FIELD_MOVE_TREES_ID
-	var cond_knows: String = "knows_field_move(\"%s\")" % FIELD_MOVE_TREES_ID
+	return _teach_field_move("nyra", "NYRA", FIELD_MOVE_TREES_ID, F_TREEFELL_LEARNED, {
+		"first": "Who will learn {move}?",
+		"again": "Shall I teach {move} to another of yours?",
+		# The maze's clue (#93): the lights mark the right way.
+		"idle": "The deep forest turns travellers round. Follow the deepest roots and the greatest trees -- every other way leads you astray.",
+		"none": "None of yours can learn {FIELD_MOVE_TREES} yet. Come back with one who can.",
+	}, again)
+
+
+## A CHIEF TEACHES a field move (DECISIONS.md #92; Nyra, Eloi): to an eligible party member who does
+## not know it yet (the player picks; one candidate and nobody knowing it = no question). Nobody
+## eligible: [param lines].none -- the move stays teachable. [param again] = a later visit (another
+## member, or just [param lines].idle). [param lines]: first / again (the questions), idle, none.
+func _teach_field_move(npc_id: String, name_key: String, move_id: String, learned_flag: String,
+		lines: Dictionary, again: bool) -> Array:
+	var cond_can: String = "can_learn_field_move(\"%s\")" % move_id
+	var cond_knows: String = "knows_field_move(\"%s\")" % move_id
 	var teach := TeachFieldMoveCommand.new()
-	teach.move_id = StringName(FIELD_MOVE_TREES_ID)
-	teach.learned_flag = F_TREEFELL_LEARNED
-	var first_q := _line("nyra", "NYRA", "Who will learn {move}?")
-	var again_q := _line("nyra", "NYRA", "Shall I teach {move} to another of yours?")
-	# The maze's clue (#93): the lights mark the right way.
-	var idle := _say([_line("nyra", "NYRA", "The deep forest turns travellers round. Follow the lights -- every other way leads you back.")])
-	var none := _say([_line("nyra", "NYRA", "None of yours can learn {FIELD_MOVE_TREES} yet. Come back with one who can.")])
+	teach.move_id = StringName(move_id)
+	teach.learned_flag = learned_flag
+	var first_q := _line(npc_id, name_key, String(lines["first"]))
+	var again_q := _line(npc_id, name_key, String(lines["again"]))
+	var idle := _say([_line(npc_id, name_key, String(lines["idle"]))])
+	var none := _say([_line(npc_id, name_key, String(lines["none"]))])
 	if not again:
 		teach.prompt = first_q
 		return [IfCommand.make(cond_can, [teach, IfCommand.make(cond_knows, [idle])], [none])]
@@ -3622,14 +3796,15 @@ func _lyra_comes_along() -> Array:
 # base), each ENCLOSED by walls of old trees several cells thick: the only walkable ground is a small
 # central clearing, four 1-wide corridors out to the four exits, and the room's own side passages --
 # tall-grass pockets and dead ends cut into the walls. You always come in from the south; of the other
-# three exits ONE is RIGHT (on to the next room) and the two WRONG ones send you back to the maze's
-# entrance (a short toast, nothing blocks). The south exit goes back a room.
+# three exits ONE is RIGHT (on to the next room) and the two WRONG ones lead into THE TANGLED THICKET
+# (#101: "wrong path followed equals tough battles, multiple enemy encounters"): a look-alike room
+# thick with grass and strong wild creatures, every way out of which brings you back to the maze's
+# entrance. The south exit goes back a room.
 #
-# THE CLUE (no dialogue needed): every choice exit has a pair of lantern posts at its mouth; at the
-# RIGHT one they are LIT (PropEntity.glow: an emissive lantern head and a light), the wrong ones stay
-# dark, and fireflies drift over the right corridor (sacred-meadow ground). The hunter in Deepwood
-# Village, Nyra and a sign at the maze's entrance say "follow the lights". (Lantern posts are
-# PLACEHOLDER props until the Blender models.)
+# THE CLUE (#101: "deeper roots and thicker trees indicate the correct path"; no dialogue needed): the
+# RIGHT exit's mouth is flanked by two GREAT TREES and great ROOTS run along its corridor; the wrong
+# exits are plain. The hunter in Deepwood Village, Nyra and a sign at the maze's entrance say "follow
+# the deepest roots". (Roots and great trees are PLACEHOLDER props until the Blender models.)
 #
 # THE SKILL IS REQUIRED: in rooms 2 and 4 a BREAKABLE TREE stands in the right exit's mouth, between
 # the lit lanterns (FieldObstacleEntity: felled for good, a saved flag). Room 3 has an optional nook
@@ -3696,17 +3871,26 @@ const DM_FORAGER := Vector2i(5, 11)
 const DM_TRAPPER := Vector2i(16, 13)
 const LV_DM_FORAGER := 10
 const LV_DM_TRAPPER := 12
-## THE CLUE: the lantern prop (PLACEHOLDER look), the lit tint and glow at the right exit, the dark
-## tint at the wrong ones.
-const DM_LIGHT_PROP := "lamp"
-const DM_LIGHT_TINT := Color(0.85, 1.0, 0.55)
-const DM_LIGHT_GLOW := 3.0
-const DM_DARK_TINT := Color(0.24, 0.24, 0.2)
-## ...and the ground of the right exit's corridor: sacred meadow, whose tile carries drifting
-## fireflies ("forest_dirt" = a plain path: the lanterns alone).
-const DM_CLUE_TILE := "sacred_meadow"
-## The toast when a wrong exit turns you back to the entrance (TODO(story): placeholder wording).
-const DM_LOST_TOAST := "You feel turned around..."
+## THE CLUE (#101): the GREAT TREES flanking the right exit's mouth and the ROOTS along its corridor
+## (PLACEHOLDER props), and their tints.
+const DM_CLUE_TREE_PROP := "great_tree"
+const DM_CLUE_TREE_TINT := Color(0.2, 0.32, 0.17)
+const DM_ROOTS_PROP := "roots"
+const DM_ROOTS_TINT := Color(0.34, 0.24, 0.15)
+## The right exit's corridor ground (under the roots).
+const DM_CLUE_TILE := "forest_dirt"
+## THE TANGLED THICKET -- where every wrong way leads (#101): its area id, the toasts going in and out
+## (TODO(story): placeholder wording), and its wild creatures: frequent HIDDEN rolls, at the top of the
+## Deep Woods band.
+const DM_LOST_ID := "depths_of_the_wood_lost"
+const DM_LOST_TOAST := "The trees close in behind you..."
+const DM_FOUND_TOAST := "...and somehow you find your way back to where you began."
+const DM_LOST_RATE := 0.3
+const DM_LOST_BAND := Vector2i(14, 15)
+const DM_LOST_TABLE := [["vineweave", 2.0], ["petalfang", 1.5], ["blightcap", 1.0]]
+const DM_LOST_ROOM := {"id": DM_LOST_ID, "right": "", "gate": false, "carve": [
+	[Rect2i(2, 2, 5, 5), "tall_grass"], [Rect2i(12, 2, 5, 5), "tall_grass"], [Rect2i(2, 10, 5, 5), "tall_grass"],
+	[Rect2i(12, 10, 5, 5), "tall_grass"], [Rect2i(7, 5, 5, 7), "tall_grass"]]}
 ## The heart of the wood: the clearing at the end of the maze, where Eldroot waits.
 const DM_HEART_ID := "depths_of_the_wood_heart"
 const DH_W := 19
@@ -3739,9 +3923,9 @@ func _dm_in_clearing(x: int, y: int) -> bool:
 ## paths through the middle), the lantern posts' cells and the room's carves.
 func _dm_terrain(room: Dictionary, x: int, y: int) -> String:
 	var c := Vector2i(x, y)
-	# THE CLUE, on the ground: the right exit's corridor (mouth to edge) is old sacred ground, where
-	# fireflies drift (the tile's own glow) -- the lit lanterns' companions.
-	if _dm_right_corridor(String(room["right"])).has(c):
+	# The right exit's corridor (mouth to edge): a path under the great roots. (The thicket has none.)
+	var right: String = String(room["right"])
+	if not right.is_empty() and _dm_right_corridor(right).has(c):
 		return DM_CLUE_TILE
 	for d in DM_EXITS:
 		if c == DM_EXITS[d]:
@@ -3750,7 +3934,8 @@ func _dm_terrain(room: Dictionary, x: int, y: int) -> String:
 		return "tree"
 	for d in DM_FLANKS:
 		if (DM_FLANKS[d] as Array).has(c):
-			return "grass_plains"  # under a lantern post (solid): the corridor stays 1 wide
+			# Under a great tree (solid) at the right exit; ordinary forest at the others.
+			return "grass_plains" if d == right else "tree"
 	# The cross of paths: the corridors out to the four exits, and on through the clearing.
 	if x == DM_C.x or y == DM_C.y:
 		return "forest_dirt"
@@ -3764,7 +3949,72 @@ func _dm_terrain(room: Dictionary, x: int, y: int) -> String:
 func _build_depths_of_the_wood() -> void:
 	for i in range(DM_ROOMS.size()):
 		_build_depths_room(i)
+	_build_lost_thicket()
 	_build_depths_heart()
+
+
+## THE CLUE at exit [param right] (#101): two GREAT TREES flanking its mouth, great ROOTS along its corridor.
+func _dm_clue(right: String) -> Array:
+	var out: Array = []
+	for f in DM_FLANKS[right]:
+		var fc: Vector2i = f
+		out.append(_prop("great_tree_%d_%d" % [fc.x, fc.y], DM_CLUE_TREE_PROP, fc, Vector2i.ONE, DM_CLUE_TREE_TINT, true))
+	for c in _dm_right_corridor(right):
+		var rc: Vector2i = c
+		out.append(_prop("roots_%d_%d" % [rc.x, rc.y], DM_ROOTS_PROP, rc, Vector2i.ONE, DM_ROOTS_TINT))
+	return out
+
+
+## THE TANGLED THICKET (#101): a look-alike room choked with grass, where the wrong ways lead -- frequent
+## HIDDEN encounters with the Deep Woods' strongest creatures; every way out returns you to the maze's
+## entrance.
+func _build_lost_thicket() -> void:
+	var room: Dictionary = DM_LOST_ROOM
+	var aid: String = DM_LOST_ID
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + "areas/" + aid))
+	var t := _new_map("Depths of the Wood", DM_W, DM_H,
+		"The Depths of the Wood: a tangled thicket where the wrong ways lead. Story-mode terrain.")
+	t.lighting_preset = "Dusk"
+	_paint(t, func(x: int, y: int) -> String: return _dm_terrain(room, x, y))
+	_add_validator_anchors(t, DM_INSIDE["south"][0], DM_C)
+	_save(t, CONTENT + "areas/%s/terrain.tres" % aid)
+	var a := OverworldAreaResource.new()
+	a.area_id = StringName(aid)
+	a.display_name = "Depths of the Wood"
+	a.kind = OverworldAreaResource.Kind.ROUTE
+	_place(a, "depths_of_the_wood")
+	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % aid)
+	var south_in: Array = DM_INSIDE["south"]
+	a.entry_points = {"south": {"cell": [south_in[0].x, south_in[0].y, 0], "facing": south_in[1]}}
+	var ents: Array = []
+	var entrance: StringName = StringName(String(DM_ROOMS[0]["id"]))
+	for d in DM_EXITS:
+		var cell: Vector2i = DM_EXITS[d]
+		var out := _warp("%s_exit" % d, Rect2i(cell.x, cell.y, 1, 1), entrance, &"south")
+		out.arrival_toast = DM_FOUND_TOAST
+		ents.append(out)
+	ents.append_array(_dm_thickets(room))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	var zone := EncounterZone.new()
+	zone.mode = EncounterZone.Mode.HIDDEN
+	var ids: Array[StringName] = [&"tall_grass", &"forest_dirt"]
+	zone.tile_ids = ids
+	zone.rate = DM_LOST_RATE
+	zone.grace_steps = 1
+	zone.level_band = DM_LOST_BAND
+	var table: Array[Resource] = []
+	for pair in DM_LOST_TABLE:
+		var e := EncounterEntry.new()
+		e.character_id = StringName(pair[0])
+		e.weight = pair[1]
+		e.kind = EncounterEntry.Kind.DUEL
+		e.can_befriend = true
+		table.append(e)
+	zone.table = table
+	var zones: Array[Resource] = [zone]
+	a.encounter_zones = zones
+	_save(a, CONTENT + "areas/%s/area.tres" % aid)
 
 
 func _build_depths_room(i: int) -> void:
@@ -3805,19 +4055,11 @@ func _build_depths_room(i: int) -> void:
 			var next: String = String(DM_ROOMS[i + 1]["id"]) if i + 1 < DM_ROOMS.size() else DM_HEART_ID
 			ents.append(_warp("%s_exit" % d, rect, StringName(next), &"south"))
 		else:
-			# A WRONG way: back to the maze's entrance.
-			var lost := _warp("%s_exit" % d, rect, entrance, &"south")
+			# A WRONG way: into the tangled thicket (tough wild creatures), then back to the entrance.
+			var lost := _warp("%s_exit" % d, rect, StringName(DM_LOST_ID), &"south")
 			lost.arrival_toast = DM_LOST_TOAST
 			ents.append(lost)
-	# THE CLUE: lantern posts at every choice exit's mouth -- LIT at the right one, dark at the others.
-	for d in DM_CHOICES:
-		for f in DM_FLANKS[d]:
-			var fc: Vector2i = f
-			var lit: bool = d == right
-			var post := _prop("light_%d_%d" % [fc.x, fc.y], DM_LIGHT_PROP, fc, Vector2i.ONE,
-				DM_LIGHT_TINT if lit else DM_DARK_TINT, true)
-			post.glow = DM_LIGHT_GLOW if lit else 0.0
-			ents.append(post)
+	ents.append_array(_dm_clue(right))
 	if bool(room["gate"]):
 		ents.append(_breakable_tree(aid, "gate_tree", DM_MOUTH[right]))
 	ents.append_array(_depths_room_extras(i, aid))
@@ -3869,7 +4111,7 @@ func _depths_room_extras(i: int, aid: String) -> Array:
 	match i:
 		0:
 			out.append(_sign("maze_sign", DM_SIGN, "Old Signpost",
-				"The deep forest turns travellers round.\nFollow the lights."))
+				"The deep forest turns travellers round.\nFollow the deepest roots and the greatest trees."))
 		1:
 			out.append(_depths_trainer("forager", DM_FORAGER, "west", "FORAGER", Color(0.46, 0.5, 0.3),
 				[{"character_id": "blightcap", "strength": 0.9}, {"character_id": "petalfang", "strength": 0.8}],
@@ -3883,16 +4125,16 @@ func _depths_room_extras(i: int, aid: String) -> Array:
 				"Quiet! You'll scare off-- oh, it's a battle you want? Fine!",
 				"All right, all right. Go on, then."))
 			out.append(_breakable_tree(aid, "nook_tree", DM_NOOK_TREE))
-			var nook := _depths_chest("nook_chest", DM_NOOK_CHEST, "west", [&"heartwood_tonic", &"clearwater_draught"], 60)
+			var nook := _chest("nook_chest", DM_NOOK_CHEST, "west", [&"heartwood_tonic", &"clearwater_draught"], 60)
 			# Out of reach (and out of sight) until its tree is felled.
 			nook.visible_if = "has(\"%s\")" % FieldObstacleEntity.flag_for(aid, "nook_tree")
 			out.append(nook)
 		3:
-			out.append(_depths_chest("pocket_chest", DM_POCKET_CHEST, "east", [&"heartwood_tonic"], 40))
+			out.append(_chest("pocket_chest", DM_POCKET_CHEST, "east", [&"heartwood_tonic"], 40))
 	return out
 
 
-func _depths_chest(id: String, cell: Vector2i, facing: String, items: Array, gold: int) -> ChestEntity:
+func _chest(id: String, cell: Vector2i, facing: String, items: Array, gold: int) -> ChestEntity:
 	var chest := ChestEntity.new()
 	chest.id = StringName(id)
 	chest.cell = Vector3i(cell.x, cell.y, 0)
@@ -3940,7 +4182,7 @@ func _depths_grass_zones() -> Array[Resource]:
 	zone.rate = 0.12
 	zone.grace_steps = 3
 	var table: Array[Resource] = []
-	for pair in [["petalfang", 2.0], ["blightcap", 2.0], ["tree_grunt", 1.5], ["vineweave", 1.0], ["oakheart", 0.5]]:
+	for pair in [["petalfang", 2.0], ["blightcap", 2.0], ["tree_grunt", 1.5], ["vineweave", 1.0]]:
 		var e := EncounterEntry.new()
 		e.character_id = StringName(pair[0])
 		e.weight = pair[1]
@@ -4089,3 +4331,2703 @@ func _build_eldroot_map() -> void:
 	var vc: Array[String] = ["Eliminate All Enemies"]
 	m.victory_conditions = vc
 	_save(m, ELDROOT_MAP_PATH)
+
+
+# =====================================================================================
+#  THE REGIONS PAST THE HEARTLANDS: their roads (DECISIONS.md #76 -- open, never one forced path)
+# =====================================================================================
+#
+# The coast (Crownhaven's harbour gate, River Crossing's coast road), the Snowy Peaks (Woodland
+# Town's north trail) and the Rocky Badlands (Crownhaven's east gate) open together, silently, the
+# first time the hero passes through the town each road leaves from after [constant
+# REGION_ROADS_OPEN_IF]. The regional bands (REGION_BANDS) and the chiefs' scaling (#80) do the
+# pacing; nothing forces an order.
+
+## Flags (save keys -- never rename once shipped): the places' open flags in WORLD_LOCATIONS.
+const F_BEACH_ROAD_OPEN := "world.beach_road_open"
+const F_FROSTPEAK_OPEN := "world.frostpeak_open"
+const F_BADLANDS_OPEN := "world.badlands_open"
+## KNOB: when those roads open. The opening's end, for now.
+const REGION_ROADS_OPEN_IF := "has(\"opening.complete\")"
+
+
+## A DUEL TRAINER on a route or in a dungeon (optional or not, by where it stands): a real battle, a
+## loss whites out. [param sight] cells of sight along its facing; [param prefix] keys its scenes.
+func _duel_trainer(prefix: String, id: String, cell: Vector2i, facing: String, name_key: String, tint: Color,
+		figure: String, team: Array, level: int, purse: int, pre: String, after: String, sight: int = 3) -> TrainerEntity:
+	var t := TrainerEntity.new()
+	t.id = StringName(id)
+	t.cell = Vector3i(cell.x, cell.y, 0)
+	t.facing = facing
+	t.display_name = _t("{%s}" % name_key)
+	t.speaker_name = t.display_name
+	t.speaker_id = StringName("npc_" + id)
+	t.tint = tint
+	t.figure = figure
+	t.body = _body_of(name_key)
+	t.sight_range = sight
+	t.pre_scene = _scene("%s_%s_pre" % [prefix, id], [_beat(&"self", "", pre)])
+	t.defeated_scene = _scene("%s_%s_after" % [prefix, id], [_beat(&"self", "", after)])
+	var spec := _duel_spec("", "{%s}" % name_key, StringName("npc_" + id), team, false,
+		BattleSpec.DefeatPolicy.WHITEOUT, purse)
+	spec.enemy_level = level
+	spec.clash_intro = true
+	t.battle = spec
+	return t
+
+
+## A VISIBLE wild-creature zone on [param tiles] with [param pairs] ([character id, weight]) -- the
+## area's band. Befriendable, like every wild creature.
+func _wild_zone(tiles: Array, pairs: Array) -> EncounterZone:
+	var zone := EncounterZone.new()
+	var ids: Array[StringName] = []
+	for t in tiles:
+		ids.append(StringName(String(t)))
+	zone.tile_ids = ids
+	zone.rate = 0.12
+	zone.grace_steps = 3
+	var table: Array[Resource] = []
+	for pair in pairs:
+		var e := EncounterEntry.new()
+		e.character_id = StringName(pair[0])
+		e.weight = pair[1]
+		e.kind = EncounterEntry.Kind.DUEL
+		e.can_befriend = true
+		table.append(e)
+	zone.table = table
+	return zone
+
+
+## A legend-style BOND offer for creature [param character_id] (#39 / #69 / #75): "Bond" records it
+## in the journey's legend list (never the party) and sets [param flag]; "Not now" leaves it.
+func _bond_offer(character_id: String, flag: String, prompt: String) -> ChoiceCommand:
+	var bond_cmd := BondLegendCommand.new()
+	bond_cmd.character_id = StringName(character_id)
+	var bond := ChoiceCommand.new()
+	bond.prompt = _narr(prompt)
+	bond.options = StoryCommand.list([
+		ChoiceOption.make("Bond", [bond_cmd, _flag(flag), SaveGameCommand.new()]),
+		ChoiceOption.make("Not now", [], true),
+	])
+	return bond
+
+
+# =====================================================================================
+#  THE SUNLIT COAST -- Beach Village (DECISIONS.md #41, #43, #50, #67, #71, #80, #85, #88)
+# =====================================================================================
+#
+#   Crownhaven's harbour gate (the north road) / River Crossing's coast road (the west road)
+#     -> BEACH VILLAGE: huts on the sand above a boardwalk promenade, two piers out over the sea, the
+#        Wayshrine. ELOI, the sea chief (#85): a SCALED chief DUEL (#50 / #80). Winning makes the sea
+#        field move TEACHABLE and he TEACHES it (#41 / #43 / #92): a member that can -- a creature, the
+#        owner's "traverse the water with a creature" -- LEARNS it.
+#     -> THE SEA: with the move, face the water, Confirm, "Use Tideride?" -> the hero rides out on the
+#        member who learned it ([RideFieldMoveCommand]); stepping onto any land ends the ride. An islet
+#        off the east pier holds a chest only the sea reaches; the sea route to the isles (the south
+#        edge) stays closed until the isles are built.
+#     -> CAEL (#88): met here -- a friendly rival (#60), an optional spar.
+#
+# All lines are short neutral PLACEHOLDERS (TODO(story)) -- the owner's facts only.
+
+const F_ELOI_BEATEN := "beach.eloi_beaten"
+## The sea move is granted (FieldMoveResource.unlock_flag), and a member has learned it (the quest step).
+const F_TIDERIDE := "fieldmove.tideride"
+const F_TIDERIDE_LEARNED := "beach.tideride_learned"
+## Cael's spar has been fought (win or lose).
+const F_CAEL_SPARRED := "beach.cael_sparred"
+const ELOI_DUEL_ID := "beach.chief.eloi"
+const CAEL_DUEL_ID := "beach.rival.cael"
+
+## THE SEA MOVE (#41 / #43 / #71): a TRAVEL field move -- its tiles are passable while a member who
+## learned it carries the hero. Creatures only (#43: "with a creature"). KNOBS: the water creatures
+## (forge imports -- PLACEHOLDERS with no battle moves yet) and the starter options, so every journey
+## has a learner (as with Treefell).
+const FIELD_MOVE_SEA_ID := "tideride"
+const FIELD_MOVE_SEA_TILES: Array[String] = ["deep_water"]
+const FIELD_MOVE_SEA_SPECIES: Array[String] = ["aquaoct", "supaoctto", "holly_snowman", "mystic_snow_spirit",
+	"storm_vessel", "tree_grunt", "petalfang", "blightcap"]
+
+## ELOI, the sea chief (#85): a DUEL (#50) SCALED inside the coast band (#80) at this offset. PLACEHOLDER
+## team (battle-ready roster stand-ins: the coast's water creatures have no moves yet) -- his FINAL
+## creature carries the stone placeholder (#38 / #67).
+const ELOI_SCALE_OFFSET := 1
+const ELOI_TEAM: Array[String] = ["mycothrall", "gem_knight", "vineweave"]
+## TODO(bond): the stone boost placeholder (the duel's strength multiplier on his final creature).
+const ELOI_STONE_BOOST := 1.15
+const ELOI_PURSE := 500
+## CAEL'S SPAR (#60 / #88): friendly, SCALED with the party inside the coast band (a rival, not a chief:
+## no boss XP). PLACEHOLDER team (his ceremony creature first).
+const CAEL_SCALE_OFFSET := 0
+const CAEL_TEAM := [{"character_id": "mycothrall", "strength": 0.95}, {"character_id": "petalfang", "strength": 0.85}]
+const CAEL_PURSE := 180
+
+const BV_W := 28
+const BV_H := 22
+## The roads in: north to Crownhaven's harbour gate, west to River Crossing.
+const BV_NORTH_X := 6
+const BV_WEST_Y := 7
+## The boardwalk promenade along the beach, and the first row of sea.
+const BV_PROM_Y := 11
+const BV_SEA_Y := 13
+## The huts, Eloi's longhouse, the Wayshrine.
+const BV_HUTS := [Rect2i(2, 4, 3, 2), Rect2i(9, 4, 3, 2), Rect2i(13, 6, 3, 2)]
+const BV_ELOI_HOUSE := Rect2i(19, 3, 5, 3)
+const BV_SHRINE := Vector2i(11, 9)
+## The piers (planks over the water) and the islet the sea move reaches.
+const BV_PIERS := [Rect2i(6, 13, 1, 6), Rect2i(17, 13, 1, 5), Rect2i(16, 18, 3, 1)]
+const BV_ISLET := Rect2i(22, 16, 4, 3)
+const BV_ISLET_CHEST := Vector2i(23, 17)
+## The sea route to the isles (closed: the isles are not built).
+const BV_SEA_ROUTE := Rect2i(10, 21, 4, 1)
+const BV_ELOI := Vector2i(21, 7)
+const BV_CAEL := Vector2i(7, 10)
+
+
+func _build_sea_move() -> void:
+	var fm := FieldMoveResource.new()
+	fm.id = StringName(FIELD_MOVE_SEA_ID)
+	fm.display_name = _t("{FIELD_MOVE_SEA}")
+	fm.unlock_flag = F_TIDERIDE
+	var sp: Array[StringName] = []
+	for s in FIELD_MOVE_SEA_SPECIES:
+		sp.append(StringName(s))
+	fm.species = sp
+	var tiles: Array[StringName] = []
+	for t in FIELD_MOVE_SEA_TILES:
+		tiles.append(StringName(t))
+	fm.travel_tiles = tiles
+	fm.travel_verb = "Ride"
+	# TODO(story): placeholder wording.
+	fm.locked_hint = "The sea stretches out, deep and blue. With the right partner, you could cross it."
+	fm.no_user_hint = "The sea could be crossed with {move} -- but nobody fit in your party has learned it."
+	fm.prompt_text = "The water is deep. Use {move}?"
+	fm.used_text = "{user} used {move}!"
+	fm.learned_text = "{user} learned {move}!"
+	_save(fm, FieldMoveResource.path_for(FIELD_MOVE_SEA_ID))
+
+
+func _bv_buildings() -> Array:
+	return BV_HUTS + [BV_ELOI_HOUSE]
+
+
+func _bv_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	if BV_ISLET.has_point(c):
+		return "sand"
+	if _in(BV_PIERS, c):
+		return "wooden_planks"
+	if y >= BV_SEA_Y:
+		return "deep_water"
+	# The two roads in.
+	if x == BV_NORTH_X and y <= 3:
+		return "forest_dirt"
+	if y == BV_WEST_Y and x <= 3:
+		return "forest_dirt"
+	if x == 0 or y == 0 or x == BV_W - 1:
+		return "tree"
+	if _in(_bv_buildings(), c):
+		return "stone_wall"
+	if c == BV_SHRINE:
+		return "sacred_ground"
+	# The boardwalk promenade above the beach.
+	if y == BV_PROM_Y and x >= 2 and x <= BV_W - 3:
+		return "wooden_planks"
+	# The grassy bluff the roads come down from; sand below it.
+	if y <= 3:
+		return "tree" if _h(x, y, 71) < 0.18 and absi(x - BV_NORTH_X) > 1 else "grass_plains"
+	return "sand"
+
+
+func _build_beach_village() -> void:
+	var t := _new_map("Beach Village", BV_W, BV_H,
+		"Beach Village: a harbour village on the sand, south-east of Crownhaven. Story-mode terrain.")
+	t.lighting_preset = "Day"
+	_paint(t, _bv_terrain)
+	_add_validator_anchors(t, Vector2i(BV_NORTH_X, 1), Vector2i(BV_SHRINE.x, BV_SHRINE.y + 1))
+	_save(t, CONTENT + "areas/beach_village/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"beach_village"
+	a.display_name = "Beach Village"
+	a.kind = OverworldAreaResource.Kind.TOWN
+	_place(a, "beach_village")
+	a.terrain = load(CONTENT + "areas/beach_village/terrain.tres")
+	a.entry_points = {
+		"north_road": {"cell": [BV_NORTH_X, 1, 0], "facing": "south"},
+		"west_road": {"cell": [1, BV_WEST_Y, 0], "facing": "east"},
+		"wayshrine": {"cell": [BV_SHRINE.x, BV_SHRINE.y + 1, 0], "facing": "north"},
+		# Back from the open sea, on the water (riding).
+		"sea_route": {"cell": [BV_SEA_ROUTE.position.x + 1, BV_SEA_ROUTE.position.y - 1, 0], "facing": "north"},
+	}
+	var ents: Array = []
+	ents.append_array(_bv_scenery())
+	ents.append(_shrine(BV_SHRINE, "Beach Wayshrine"))
+	ents.append_array(_bv_people())
+	ents.append(_warp("north_exit", Rect2i(BV_NORTH_X, 0, 1, 1), &"crownhaven", &"harbour_gate"))
+	ents.append(_warp("west_exit", Rect2i(0, BV_WEST_Y, 1, 1), &"river_crossing", &"east_road"))
+	# The sea route south: reached only by sea, out to the waters off Stormreef Isle -- calm, or (in the
+	# post-game, #98) with the new volcanic island standing in them.
+	ents.append(_warp("sea_route", BV_SEA_ROUTE, &"stormreef_waters", &"north", "not (%s)" % POSTGAME))
+	ents.append(_warp("sea_route_erupted", BV_SEA_ROUTE, &"stormreef_waters_erupted", &"north", POSTGAME))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	a.on_enter = StoryCommand.list([
+		IfCommand.make("not has(\"beach.arrived\")", [_flag("beach.arrived")]),
+	])
+	_save(a, CONTENT + "areas/beach_village/area.tres")
+
+
+func _bv_scenery() -> Array:
+	var out: Array = []
+	var driftwood := Color(0.56, 0.46, 0.34)
+	var sea_blue := Color(0.24, 0.42, 0.56)
+	# PLACEHOLDER huts (cabins until the Blender models arrive) and Eloi's longhouse.
+	for i in range(BV_HUTS.size()):
+		var r: Rect2i = BV_HUTS[i]
+		out.append(_prop("hut_%d" % i, "cabin", r.position, r.size, [driftwood, sea_blue.lightened(0.2)][i % 2]))
+	out.append(_prop("eloi_house", "house", BV_ELOI_HOUSE.position, BV_ELOI_HOUSE.size, sea_blue))
+	out.append(_prop("banner_eloi", "banner", Vector2i(BV_ELOI_HOUSE.position.x - 1, BV_ELOI_HOUSE.end.y - 1), Vector2i.ONE, sea_blue, true))
+	for pc in [Vector2i(1, 9), Vector2i(26, 8), Vector2i(18, 9), Vector2i(8, 8), Vector2i(24, 17)]:
+		out.append(_prop("palm_%d_%d" % [pc.x, pc.y], "palm", pc, Vector2i.ONE, Color.WHITE, true))
+	for bc in [Vector2i(3, 12), Vector2i(24, 12)]:
+		out.append(_prop("boat_%d_%d" % [bc.x, bc.y], "boat", bc, Vector2i.ONE, [driftwood, sea_blue][bc.x % 2], true))
+	out.append(_prop("barrels_pier", "barrels", Vector2i(8, 12), Vector2i.ONE, Color.WHITE, true))
+	out.append(_prop("nets", "logs", Vector2i(15, 12), Vector2i.ONE, driftwood, true))
+	for lc in [Vector2i(5, 10), Vector2i(16, 10)]:
+		out.append(_prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.82, 0.45), true))
+	return out
+
+
+func _bv_people() -> Array:
+	var out: Array = []
+	out.append(_sign("village_sign", Vector2i(4, BV_WEST_Y + 1), "Beach Village",
+		"BEACH VILLAGE\nNorth: Crownhaven.  West: River Crossing."))
+	out.append(_eloi())
+	out.append(_cael())
+	# Villagers: one placeholder line each in dialogue.json (areas.beach_village.<id>).
+	out.append(_npc("bv_fisher", Vector2i(6, 18), "south", "BEACH_FISHER", Color(0.3, 0.46, 0.56), "villager"))
+	out.append(_npc("bv_net_mender", Vector2i(14, 9), "west", "NET_MENDER", Color(0.6, 0.5, 0.36), "villager"))
+	out.append(_npc("bv_harbour_hand", Vector2i(16, 18), "west", "HARBOUR_HAND", Color(0.4, 0.4, 0.46), "villager"))
+	out.append(_npc("bv_child", Vector2i(4, 9), "east", "BEACH_CHILD", Color(0.86, 0.6, 0.36), "child"))
+	# Only the sea reaches it.
+	out.append(_chest("islet_chest", BV_ISLET_CHEST, "north", [&"dawnpetal_draught", &"clearwater_draught"], 120))
+	return out
+
+
+## ELOI'S CHIEF DUEL (#50 / #80): SCALED inside the coast band, a boss battle for XP. A loss whites
+## out (he waits); a win grants the sea move.
+func _eloi_spec() -> BattleSpec:
+	var team: Array = []
+	for i in range(ELOI_TEAM.size()):
+		var row: Dictionary = {"character_id": ELOI_TEAM[i], "strength": 1.0}
+		if i == ELOI_TEAM.size() - 1:
+			# TODO(bond): stone boost -- he uses the stone with his FINAL creature (#38 / #67).
+			row["strength"] = ELOI_STONE_BOOST
+		team.append(row)
+	var spec := _duel_spec(ELOI_DUEL_ID, "{ELOI}", &"npc_eloi", team, false, BattleSpec.DefeatPolicy.WHITEOUT,
+		ELOI_PURSE, [], [F_ELOI_BEATEN, F_TIDERIDE])
+	BattleSpec.make_chief(spec, REGION_BANDS["sunlit_coast"], ELOI_SCALE_OFFSET)
+	spec.clash_intro = true
+	return spec
+
+
+## Eloi by his longhouse. TODO(story): placeholder lines -- owner facts only (the sea chief; beating
+## him grants the power to traverse the sea, #43). The duel first; winning makes the move teachable
+## and he teaches it to ONE eligible member the player picks; talk to him again for another.
+func _eloi() -> NpcEntity:
+	var eloi := _npc("eloi", BV_ELOI, "south", "ELOI", Color(0.24, 0.4, 0.56), "elder")
+	var won: Array = [
+		_say([_line("eloi", "ELOI", "Well fought. The sea will carry you now -- let me show one of yours how.")]),
+	]
+	won.append_array(_eloi_teach(false))
+	won.append(SaveGameCommand.new())
+	var ask := ChoiceCommand.new()
+	ask.prompt = _line("eloi", "ELOI", "I'm {ELOI}, chief of this village. Show me your strength, and the sea is yours to cross. Ready?")
+	ask.options = StoryCommand.list([
+		ChoiceOption.make("Battle!", [_duel(_eloi_spec()), IfCommand.make("outcome() == \"victory\"", won)]),
+		ChoiceOption.make("Not yet.", [], true),
+	])
+	var later: Array = _eloi_teach(true)
+	later.append(SaveGameCommand.new())
+	eloi.on_interact = StoryCommand.list([
+		IfCommand.make("not has(\"%s\")" % F_ELOI_BEATEN, [ask], later),
+	])
+	return eloi
+
+
+func _eloi_teach(again: bool) -> Array:
+	return _teach_field_move("eloi", "ELOI", FIELD_MOVE_SEA_ID, F_TIDERIDE_LEARNED, {
+		"first": "Which of yours will learn {move}?",
+		"again": "Shall I teach {move} to another of yours?",
+		"idle": "Face the water and call on {FIELD_MOVE_SEA}. Step onto any shore to come back to land.",
+		"none": "None of yours can learn {FIELD_MOVE_SEA} yet. Come back with a creature that can.",
+	}, again)
+
+
+## CAEL'S SPAR (#60 / #88): a friendly rival DUEL -- never permadeath, a loss costs nothing.
+func _cael_spec() -> BattleSpec:
+	var team: Array = []
+	for row in CAEL_TEAM:
+		team.append((row as Dictionary).duplicate())
+	var spec := _duel_spec(CAEL_DUEL_ID, "{CAEL}", &"npc_cael", team, true,
+		BattleSpec.DefeatPolicy.CONTINUE, CAEL_PURSE)
+	BattleSpec.make_chief(spec, REGION_BANDS["sunlit_coast"], CAEL_SCALE_OFFSET)
+	spec.boss_battle = false
+	spec.clash_intro = true
+	return spec
+
+
+## Cael on the promenade (#88): his greeting is in dialogue.json (areas.beach_village.cael); talk ->
+## an optional friendly spar ("Not now" is fine; he blocks nothing). TODO(story): placeholder lines.
+func _cael() -> NpcEntity:
+	var cael := _npc("cael", BV_CAEL, "east", "CAEL", Color(0.42, 0.52, 0.66), "trainer")
+	var bout: Array = [_duel(_cael_spec())]
+	bout.append(IfCommand.make(FOUGHT, [
+		_say([_line("cael", "CAEL", "Good bout. Let's do it again sometime.")]),  # TODO(story)
+		_flag(F_CAEL_SPARRED),
+		SaveGameCommand.new(),
+	], [
+		_say([_line("cael", "CAEL", "Your partner needs rest first. Find me after.")]),  # TODO(story)
+	]))
+	var offer := ChoiceCommand.new()
+	offer.prompt = _line("cael", "CAEL", "Want a friendly bout, to see how far we've both come?")  # TODO(story)
+	offer.options = StoryCommand.list([ChoiceOption.make("Let's go.", bout), ChoiceOption.make("Not now.", [], true)])
+	cael.on_interact = StoryCommand.list([
+		IfCommand.make("not has(\"%s\")" % F_CAEL_SPARRED, [offer]),
+	])
+	return cael
+
+
+# =====================================================================================
+#  THE SNOWY PEAKS -- Frostpeak Village (DECISIONS.md #45, #49, #50, #67, #69, #75, #80, #85, #95)
+# =====================================================================================
+#
+#   Woodland Town's north trail
+#     -> FROSTPEAK VILLAGE: a snowbound village under the peaks -- and EVERYONE IS ASLEEP (#95):
+#        villagers dozing on their feet in the street, others in their beds (the inn, a house), the
+#        chief SAEVI (#85) asleep by her lodge. Nobody wakes when spoken to.
+#     -> THE INN: the hero must REST -- Confirm on an empty bed, "Rest?" -> the party is healed and the
+#        hero falls into a DREAM (#49 / #95).
+#     -> THE DREAM (frostpeak_dream): the same village in a violet half-light, empty but for SAEVI --
+#        DISORIENTED, she thinks the hero did this -- and the two MYTHICAL creatures (one of nightmares,
+#        one of dreams) playing and fighting by her lodge. Saevi first: a SCALED chief DUEL (#50 / #80).
+#        Then, at the creatures: a TACTICAL battle against both (#49) -- Eliminate All Enemies, NO gem /
+#        base to protect (#95). Win -> each may be bonded (#69 / #75, the legend list); then the hero
+#        wakes in the inn, and the town is awake.
+#     -> A creature the hero declined waits by the frozen pond (talk: the bond again). The dream's
+#        south trail wakes the hero early (back in the inn bed), progress kept.
+#
+# All lines are short neutral PLACEHOLDERS (TODO(story)) -- the owner's facts only.
+
+const F_FP_ARRIVED := "frostpeak.arrived"
+## The hero rested in the inn and fell into the dream (the first time).
+const F_FP_DREAMING := "frostpeak.dreaming"
+const F_SAEVI_BEATEN := "frostpeak.saevi_beaten"
+## The tactical battle against the two mythical creatures is won.
+const F_DREAM_WON := "frostpeak.dream_won"
+## The town is awake (the hero woke from the dream after the win).
+const F_FP_AWAKE := "frostpeak.awake"
+const SAEVI_DUEL_ID := "frostpeak.chief.saevi"
+const DREAM_BATTLE_ID := "frostpeak.mythic.dream_pair"
+## Frostpeak's people sleep until the town wakes.
+const FP_ASLEEP := "not has(\"frostpeak.awake\")"
+
+## SAEVI, the winter chief (#85): a DUEL (#50) SCALED inside the Snowy Peaks band (#80). PLACEHOLDER team
+## (battle-ready stand-ins) -- her FINAL creature carries the stone placeholder (#38 / #67).
+const SAEVI_SCALE_OFFSET := 1
+const SAEVI_TEAM: Array[String] = ["monster", "mycothrall", "gem_knight"]
+## TODO(bond): the stone boost placeholder.
+const SAEVI_STONE_BOOST := 1.15
+const SAEVI_PURSE := 650
+## THE TWO MYTHICAL CREATURES (#49 / #69): one who causes NIGHTMARES, one who causes DREAMS. KNOBS:
+## Eclupus (eclipse_wolf) is the owner's mythical (2026-10-12); the dreamer is still a PLACEHOLDER stand-in. Each is bonded
+## like a legend (#39 / #75: the legend list, never the party) -- "both can be caught" (#69).
+## [entity id, roster unit, its bonded flag]
+const DREAM_PAIR := [
+	["nightmare", "eclipse_wolf", "mythic.nightmare.bonded"],  # owner 2026-10-12: Fleecefang, the wolf in sheep's clothing (the only mythical made so far)
+	["dreamer", "gem_knight", "mythic.dreamer.bonded"],  # PLACEHOLDER: the owner's DREAM SHEEP (brings good sleep; Lambush chases it) is not made yet
+]
+## Their TACTICAL board: Eliminate All Enemies, no base to protect (#95). Squad of up to this many.
+const DREAM_MAP_PATH := CONTENT + "battles/ow_frostpeak_dream.tres"
+const DREAM_SQUAD_SIZE := 4
+
+const FP_W := 24
+const FP_H := 20
+## The trail south (to Woodland Town), the main street up to the chief's lodge, the cross street.
+const FP_SOUTH_X := 11
+const FP_CROSS_Y := 9
+const FP_LANE_Y := 5
+## The inn (enterable: the beds), Saevi's lodge, a house (enterable: sleepers in their beds), houses.
+const FP_INN := Rect2i(4, 4, 4, 3)
+const FP_LODGE := Rect2i(14, 2, 5, 3)
+const FP_HOUSE := Rect2i(3, 12, 3, 2)
+const FP_HOUSES := [Rect2i(17, 12, 3, 2), Rect2i(18, 6, 3, 2)]
+const FP_SHRINE := Vector2i(8, 11)
+const FP_POND := Rect2i(15, 14, 4, 3)
+const FP_SAEVI := Vector2i(16, 5)
+## In the dream: where the hero arrives (before the inn's door), where Saevi stands, the creatures.
+const FD_START := Vector2i(5, 7)
+const FD_SAEVI := Vector2i(12, 8)
+const FD_PAIR_CELLS := [Vector2i(14, 6), Vector2i(17, 6)]
+const FD_PAIR_FACING := ["east", "west"]
+## A declined creature waits by the frozen pond in the waking village.
+const FP_PAIR_CELLS := [Vector2i(14, 15), Vector2i(19, 15)]
+## The inn's beds (1x2, against the north wall; the interior's floor is 10x7 -> x 1..10, y 1..7).
+## [prop id, x, the sleeper lying in it ("" = an empty bed you can rest in)]
+const FP_INN_BEDS := [["bed_a", 3, ""], ["bed_b", 5, "fp_traveller"], ["bed_c", 8, ""]]
+const FP_INN_ID := "frostpeak_inn"
+const FP_HOUSE_ID := "frostpeak_house"
+## The house's beds and sleepers ([prop id, x, sleeper id, NAMES key, figure]).
+const FP_HOUSE_BEDS := [["bed_a", 2, "fp_sleeper", "FROST_SLEEPER", "villager"], ["bed_b", 6, "fp_child_bed", "FROST_CHILD", "child"]]
+
+
+func _fp_buildings() -> Array:
+	return [FP_INN, FP_LODGE, FP_HOUSE] + FP_HOUSES
+
+
+## Frostpeak's ground (the waking village and the dream share it; [param dream] scatters the dream's
+## firefly-lit meadow patches over the snow).
+func _fp_terrain(x: int, y: int, dream: bool) -> String:
+	var c := Vector2i(x, y)
+	if x == FP_SOUTH_X and (y == FP_H - 1 or y < FP_LANE_Y):
+		return "frozen_tundra"
+	if x == 0 or y == 0 or x == FP_W - 1 or y == FP_H - 1:
+		return "frozen_pine"
+	if _in(_fp_buildings(), c):
+		return "stone_wall"
+	if c == FP_SHRINE:
+		return "sacred_ground"
+	if FP_POND.has_point(c):
+		return "ice_sheet"
+	# The streets: up from the trail to the chief's lodge, across the village.
+	if x == FP_SOUTH_X and y >= FP_LANE_Y:
+		return "frozen_tundra"
+	if y == FP_LANE_Y and x >= FP_SOUTH_X and x <= FP_SAEVI.x:
+		return "frozen_tundra"
+	if y == FP_CROSS_Y and x >= 3 and x <= FP_W - 4:
+		return "frozen_tundra"
+	# Pines crowd the edges (never in the village proper).
+	if (x <= 1 or x >= FP_W - 2 or y <= 1) and _h(x, y, 83) < 0.5:
+		return "frozen_pine"
+	if dream and _h(x, y, 97) < 0.1:
+		return "sacred_meadow"
+	return "snow_field"
+
+
+## [param dream]: false = the real village (frostpeak_village), true = the dream (frostpeak_dream).
+func _build_frostpeak(dream: bool) -> void:
+	var aid: String = "frostpeak_dream" if dream else "frostpeak_village"
+	var t := _new_map("Frostpeak Village", FP_W, FP_H,
+		("Frostpeak Village in a dream: the same streets in a violet half-light." if dream
+			else "Frostpeak Village: a snowbound village under the Snowy Peaks, north of Woodland Town.") + " Story-mode terrain.")
+	t.lighting_preset = "Dream" if dream else "Day"
+	t.environment_preset = "Snow"
+	_paint(t, func(x: int, y: int) -> String: return _fp_terrain(x, y, dream))
+	_add_validator_anchors(t, Vector2i(FP_SOUTH_X, FP_H - 2), Vector2i(FP_SHRINE.x, FP_SHRINE.y + 1))
+	_save(t, CONTENT + "areas/%s/terrain.tres" % aid)
+
+	var a := OverworldAreaResource.new()
+	a.area_id = StringName(aid)
+	# The dream shares the village's name (the popup never says "dream").
+	a.display_name = "Frostpeak Village"
+	a.kind = OverworldAreaResource.Kind.TOWN
+	_place(a, "frostpeak_village")
+	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % aid)
+	var ents: Array = []
+	ents.append_array(_fp_scenery(dream))
+	if dream:
+		a.entry_points = {
+			"dream_start": {"cell": [FD_START.x, FD_START.y, 0], "facing": "south"},
+			"south_trail": {"cell": [FP_SOUTH_X, FP_H - 2, 0], "facing": "north"},
+		}
+		ents.append_array(_fd_people())
+		# The trail out of the dream WAKES you (back in the inn's bed); what you did there is kept.
+		for side in [["south_exit", FP_H - 1], ["north_exit", 0]]:
+			var wake := _warp(String(side[0]), Rect2i(FP_SOUTH_X, int(side[1]), 1, 1), StringName(FP_INN_ID), &"bed")
+			wake.arrival_toast = "You wake with a start."  # TODO(story)
+			ents.append(wake)
+		a.on_enter = StoryCommand.list([
+			IfCommand.make("not has(\"%s\")" % F_FP_DREAMING, [_flag(F_FP_DREAMING)]),
+		])
+	else:
+		a.entry_points = {
+			"south_trail": {"cell": [FP_SOUTH_X, FP_H - 2, 0], "facing": "north"},
+			"north_trail": {"cell": [FP_SOUTH_X, 1, 0], "facing": "south"},
+			"wayshrine": {"cell": [FP_SHRINE.x, FP_SHRINE.y + 1, 0], "facing": "north"},
+		}
+		# The post-game's BLIZZARD over the Snowy Peaks (#99).
+		a.weather_alt = "blizzard"
+		a.weather_if = POSTGAME
+		ents.append(_shrine(FP_SHRINE, "Frostpeak Wayshrine"))
+		ents.append_array(_fp_people())
+		ents.append(_warp("south_exit", Rect2i(FP_SOUTH_X, FP_H - 1, 1, 1), &"woodland_town", &"north_trail"))
+		ents.append(_warp("north_exit", Rect2i(FP_SOUTH_X, 0, 1, 1), &"snowy_peaks", &"south_trail"))
+		a.on_enter = StoryCommand.list([
+			IfCommand.make("not has(\"%s\")" % F_FP_ARRIVED, [_flag(F_FP_ARRIVED)]),
+		])
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	_save(a, CONTENT + "areas/%s/area.tres" % aid)
+
+
+func _fp_scenery(dream: bool) -> Array:
+	var out: Array = []
+	var timber := Color(0.36, 0.3, 0.34)
+	var violet := Color(0.36, 0.26, 0.5)
+	# PLACEHOLDER buildings (cabins / houses until the Blender models arrive); the inn and one house are
+	# enterable in the waking village (INTERIORS).
+	out.append(_prop("fp_inn", "house", FP_INN.position, FP_INN.size, Color(0.4, 0.34, 0.42)))
+	out.append(_prop("saevi_lodge", "cabin", FP_LODGE.position, FP_LODGE.size, violet))
+	out.append(_prop("fp_house", "cabin", FP_HOUSE.position, FP_HOUSE.size, timber))
+	for i in range(FP_HOUSES.size()):
+		var r: Rect2i = FP_HOUSES[i]
+		out.append(_prop("fp_cabin_%d" % i, "cabin", r.position, r.size, [timber, Color(0.3, 0.32, 0.4)][i % 2]))
+	out.append(_prop("banner_lodge", "banner", Vector2i(FP_LODGE.position.x - 1, FP_LODGE.end.y - 1), Vector2i.ONE, violet, true))
+	out.append(_prop("woodpile", "logs", Vector2i(5, 17), Vector2i(2, 1), Color(0.5, 0.38, 0.26), true))
+	for lc in [Vector2i(10, 12), Vector2i(12, 7)]:
+		var lamp := _prop("lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(0.86, 0.8, 1.0) if dream else Color(1.0, 0.82, 0.45), true)
+		lamp.glow = 2.0 if dream else 0.0
+		out.append(lamp)
+	if dream:
+		# The dream's floating starstone-violet crystals (PLACEHOLDER look).
+		for cc in [Vector2i(7, 14), Vector2i(19, 9), Vector2i(3, 7), Vector2i(14, 17)]:
+			var cr := _prop("dream_crystal_%d_%d" % [cc.x, cc.y], "crystal", cc, Vector2i.ONE, Color(0.78, 0.6, 1.0), true)
+			cr.glow = 3.0
+			out.append(cr)
+	return out
+
+
+## The waking village's people: asleep until the town wakes (#95) -- dozing on their feet in the
+## street; Saevi asleep by her lodge. Their lines (asleep / awake) are in dialogue.json.
+func _fp_people() -> Array:
+	var out: Array = []
+	out.append(_sign("village_sign", Vector2i(FP_SOUTH_X + 1, FP_H - 3), "Frostpeak Village",
+		"FROSTPEAK VILLAGE\nSouth: the trail down to Woodland Town."))
+	var fur := Color(0.46, 0.42, 0.5)
+	for row in [["fp_watch", Vector2i(12, 17), "south", "FROST_WATCH", "guard"],
+			["fp_elder", Vector2i(9, 7), "east", "FROST_ELDER", "elder"],
+			["fp_hunter", Vector2i(20, 10), "west", "FROST_HUNTER", "trainer"],
+			["fp_woodcutter", Vector2i(6, 16), "north", "FROST_WOODCUTTER", "villager"],
+			["fp_child", Vector2i(14, 12), "south", "FROST_CHILD", "child"]]:
+		var n := _npc(String(row[0]), row[1], String(row[2]), String(row[3]), fur, String(row[4]))
+		n.asleep_if = FP_ASLEEP
+		out.append(n)
+	var saevi := _npc("saevi", FP_SAEVI, "south", "SAEVI", Color(0.32, 0.24, 0.44), "elder")
+	saevi.asleep_if = FP_ASLEEP
+	out.append(saevi)
+	# A mythical creature the hero did not bond with after the dream waits by the pond (#69 / #75).
+	for i in range(DREAM_PAIR.size()):
+		out.append(_dream_creature(DREAM_PAIR[i], FP_PAIR_CELLS[i], "south", false))
+	return out
+
+
+## The dream's people: SAEVI (disoriented: she thinks the hero did this) and the two creatures.
+func _fd_people() -> Array:
+	var out: Array = []
+	out.append(_saevi_dream())
+	for i in range(DREAM_PAIR.size()):
+		out.append(_dream_creature(DREAM_PAIR[i], FD_PAIR_CELLS[i], String(FD_PAIR_FACING[i]), true))
+	return out
+
+
+## SAEVI'S CHIEF DUEL (#50 / #80): SCALED inside the Snowy Peaks band, a boss battle. A loss whites out
+## (you wake at your Wayshrine; rest at the inn to dream again -- she waits).
+func _saevi_spec() -> BattleSpec:
+	var team: Array = []
+	for i in range(SAEVI_TEAM.size()):
+		var row: Dictionary = {"character_id": SAEVI_TEAM[i], "strength": 1.0}
+		if i == SAEVI_TEAM.size() - 1:
+			# TODO(bond): stone boost -- she uses the stone with her FINAL creature (#38 / #67).
+			row["strength"] = SAEVI_STONE_BOOST
+		team.append(row)
+	var spec := _duel_spec(SAEVI_DUEL_ID, "{SAEVI}", &"npc_saevi", team, false, BattleSpec.DefeatPolicy.WHITEOUT,
+		SAEVI_PURSE, [], [F_SAEVI_BEATEN])
+	BattleSpec.make_chief(spec, REGION_BANDS["snowy_peaks"], SAEVI_SCALE_OFFSET)
+	spec.clash_intro = true
+	return spec
+
+
+## Saevi in the dream (#49): DISORIENTED -- she believes the hero may have caused it -> the duel. Won:
+## she sees it was the two creatures, tends your party (it is a dream) and points at them. After the
+## tactical win (a journey that stopped mid-wake) she finishes the waking. TODO(story): placeholder lines.
+func _saevi_dream() -> NpcEntity:
+	var saevi := _npc("saevi", FD_SAEVI, "south", "SAEVI", Color(0.32, 0.24, 0.44), "elder")
+	var won: Array = [
+		_say([
+			_line("saevi", "SAEVI", "...You're not the one. It's them -- the two who play in our sleep."),
+			_line("saevi", "SAEVI", "Let me tend your partners. Then help me drive them out of our dreams."),
+		]),
+		HealPartyCommand.new(),
+	]
+	var ask := ChoiceCommand.new()
+	ask.prompt = _line("saevi", "SAEVI", "Who are you? Did you do this -- put my people to sleep? Answer me!")
+	ask.options = StoryCommand.list([
+		ChoiceOption.make("Battle!", [_duel(_saevi_spec()), IfCommand.make("outcome() == \"victory\"", won)]),
+		ChoiceOption.make("Not yet.", [], true),
+	])
+	saevi.on_interact = StoryCommand.list([
+		IfCommand.make("not has(\"%s\")" % F_SAEVI_BEATEN, [ask], [
+			IfCommand.make("has(\"%s\")" % F_DREAM_WON, _dream_wake(), [
+				_say([_line("saevi", "SAEVI", "There -- by my lodge. Face them, and I'll be right behind you.")]),
+			]),
+		]),
+	])
+	return saevi
+
+
+## THE TWO CREATURES' TACTICAL battle (#49 / #95): both on one board, Eliminate All Enemies, no base to
+## protect; FIXED above the band like a legend (#81); Try Again on a loss.
+func _dream_spec() -> BattleSpec:
+	var spec := BattleSpec.new()
+	spec.kind = BattleSpec.Kind.TACTICAL
+	spec.encounter_id = DREAM_BATTLE_ID
+	spec.map_path = DREAM_MAP_PATH
+	spec.squad_size = DREAM_SQUAD_SIZE
+	spec.ai_difficulty = 1
+	var names: Array[String] = []
+	var team: Array[Dictionary] = []
+	for row in DREAM_PAIR:
+		names.append(_species_name(StringName(row[1])))
+		team.append({"character_id": String(row[1]), "strength": 1.0})
+	spec.opponent_name = " & ".join(names)
+	spec.opponent_team = team
+	BattleSpec.make_legend(spec, REGION_BANDS["snowy_peaks"])
+	var flags: Array[String] = [F_DREAM_WON]
+	spec.reward_flags = flags
+	spec.defeat_policy = BattleSpec.DefeatPolicy.RETRY
+	spec.clash_intro = true
+	return spec
+
+
+## One of the two creatures ([param row] = DREAM_PAIR's). [param dream]: in the dream (before the win:
+## lost in their game until Saevi is beaten, then the battle) or by the waking village's pond (after the
+## win, until bonded: the bond again).
+func _dream_creature(row: Array, cell: Vector2i, facing: String, dream: bool) -> NpcEntity:
+	var e := NpcEntity.new()
+	e.id = StringName(String(row[0]))
+	e.cell = Vector3i(cell.x, cell.y, 0)
+	e.facing = facing
+	e.display_name = _species_name(StringName(row[1]))
+	e.speaker_name = e.display_name
+	e.visual_character = StringName(row[1])
+	var bond := _bond_offer(String(row[1]), String(row[2]), "%s watches you, calm now. Bond with it?" % e.display_name)
+	if not dream:
+		e.visible_if = "has(\"%s\") and not has(\"%s\")" % [F_DREAM_WON, String(row[2])]
+		e.on_interact = StoryCommand.list([bond])
+		return e
+	e.visible_if = "not has(\"%s\")" % F_DREAM_WON
+	var fight := StartBattleCommand.new()
+	fight.spec = _dream_spec()
+	fight.source = BattleRequest.SOURCE_SCRIPT
+	var face := ChoiceCommand.new()
+	face.prompt = _narr("The two creatures turn on you at last -- the dream shudders. Face them?")
+	face.options = StoryCommand.list([
+		ChoiceOption.make("Face them", [fight, IfCommand.make("outcome() == \"victory\"", _dream_wake())]),
+		ChoiceOption.make("Not yet", [], true),
+	])
+	e.on_interact = StoryCommand.list([
+		IfCommand.make("has(\"%s\")" % F_SAEVI_BEATEN, [face], [
+			_say([_narr("The two creatures circle each other, lost in their game. They do not notice you.")]),
+		]),
+	])
+	return e
+
+
+## After the creatures are beaten: the bond offers (#69 / #75), then the hero WAKES in the inn and the
+## town wakes with him. TODO(story): placeholder lines.
+func _dream_wake() -> Array:
+	var out: Array = [
+		_say([_line("saevi", "SAEVI", "They're still at last. My people will wake now -- and so will you.")]),
+	]
+	for row in DREAM_PAIR:
+		var nm: String = _species_name(StringName(row[1]))
+		out.append(IfCommand.make("not has(\"%s\")" % String(row[2]), [
+			_bond_offer(String(row[1]), String(row[2]), "%s watches you, calm now. Bond with it?" % nm),
+		]))
+	out.append(_flag(F_FP_AWAKE))
+	out.append(_say([_narr("The violet light thins, and the dream lets you go...")]))
+	out.append(_warp_cmd(StringName(FP_INN_ID), &"bed"))
+	return out
+
+
+## The inn's people and beds: the innkeeper dozing on their feet behind the counter,
+## a traveller asleep in one bed, and the EMPTY beds the hero rests in.
+func _fp_inn_people(size: Vector2i) -> Array:
+	var out: Array = []
+	var keeper := _npc("fp_innkeeper", Vector2i(size.x - 1, 4), "south", "FROST_INNKEEPER", Color(0.5, 0.36, 0.3), "villager")
+	keeper.asleep_if = FP_ASLEEP
+	out.append(keeper)
+	for b in FP_INN_BEDS:
+		var bx: int = int(b[1])
+		var bed := _prop(String(b[0]), "bed", Vector2i(bx, 1), Vector2i(1, 2), Color(0.42, 0.3, 0.52))
+		if String(b[2]).is_empty():
+			bed.verb = "Rest"
+			bed.on_interact = StoryCommand.list(_fp_rest())
+		else:
+			var sleeper := _npc(String(b[2]), Vector2i(bx, 2), "south", "FROST_TRAVELLER", Color(0.44, 0.4, 0.3), "villager")
+			sleeper.asleep_if = FP_ASLEEP
+			sleeper.sleep_pose = "lie"
+			# In bed until the town wakes; up and gone after.
+			sleeper.visible_if = FP_ASLEEP
+			out.append(sleeper)
+		out.append(bed)
+	return out
+
+
+## RESTING in an inn bed (#95): while the town sleeps, the rest takes the hero into the DREAM (healed
+## first); once it is awake, an ordinary rest. TODO(story): placeholder lines.
+func _fp_rest() -> Array:
+	var dream := ChoiceCommand.new()
+	dream.prompt = _narr("Everyone in the inn is fast asleep. Lie down in the empty bed and rest?")
+	dream.options = StoryCommand.list([
+		ChoiceOption.make("Rest", [
+			HealPartyCommand.new(),
+			_say([_narr("You close your eyes... and the room tilts into a strange, violet light.")]),
+			_warp_cmd(&"frostpeak_dream", &"dream_start"),
+		]),
+		ChoiceOption.make("Not now", [], true),
+	])
+	var rest := ChoiceCommand.new()
+	rest.prompt = _narr("Rest a while?")
+	rest.options = StoryCommand.list([
+		ChoiceOption.make("Rest", [
+			HealPartyCommand.new(),
+			SaveGameCommand.new(),
+			_say([_narr("You rest, and wake refreshed. Your party is ready to go.")]),
+		]),
+		ChoiceOption.make("Not now", [], true),
+	])
+	return [IfCommand.make(FP_ASLEEP, [dream], [rest])]
+
+
+## The house: two of the village asleep in their beds (#95); up and gone once the town wakes.
+func _fp_house_people() -> Array:
+	var out: Array = []
+	for b in FP_HOUSE_BEDS:
+		var bx: int = int(b[1])
+		out.append(_prop(String(b[0]), "bed", Vector2i(bx, 1), Vector2i(1, 2), Color(0.36, 0.42, 0.52)))
+		var sleeper := _npc(String(b[2]), Vector2i(bx, 2), "south", String(b[3]), Color(0.44, 0.4, 0.46), String(b[4]))
+		sleeper.asleep_if = FP_ASLEEP
+		sleeper.sleep_pose = "lie"
+		sleeper.visible_if = FP_ASLEEP
+		out.append(sleeper)
+	return out
+
+
+## The two creatures' board: a dream-lit village square (Eliminate All Enemies, no base). Both are
+## BOSS spawns at the legend level; your squad chairs to the south (the squad pick fills them).
+func _build_dream_battle_map() -> void:
+	var m := _new_map("Frostpeak, Dreaming", 12, 10,
+		"Frostpeak's square in a dream, where the two mythical creatures play and fight.")
+	m.lighting_preset = "Dream"
+	m.environment_preset = "Snow"
+	var pines := [Vector2i(0, 0), Vector2i(1, 0), Vector2i(10, 0), Vector2i(11, 0), Vector2i(0, 9), Vector2i(11, 9),
+		Vector2i(2, 5), Vector2i(9, 5)]
+	var meadow := [Vector2i(3, 3), Vector2i(8, 3), Vector2i(5, 5), Vector2i(6, 5), Vector2i(1, 7), Vector2i(10, 7)]
+	_paint(m, func(x: int, y: int) -> String:
+		var c := Vector2i(x, y)
+		if c in pines:
+			return "frozen_pine"
+		if c in meadow:
+			return "sacred_meadow"
+		if x == 6 and y >= 4:
+			return "frozen_tundra"
+		return "snow_field")
+	m.unit_spawns.clear()
+	for c in [Vector2i(4, 8), Vector2i(6, 8), Vector2i(8, 8), Vector2i(5, 9)]:
+		m.set_character_spawn_at_position(c, 0, String(STARTER_ID))
+	var boss_cells := [Vector2i(4, 2), Vector2i(7, 2)]
+	for i in range(DREAM_PAIR.size()):
+		m.set_character_spawn_at_position(boss_cells[i], 1, String(DREAM_PAIR[i][1]), "BOSS")
+	var vc: Array[String] = ["Eliminate All Enemies"]
+	m.victory_conditions = vc
+	_save(m, DREAM_MAP_PATH)
+
+
+# =====================================================================================
+#  THE ROCKY BADLANDS -- Redrock Village and the secret hideout (DECISIONS.md #46, #57, #73, #96)
+# =====================================================================================
+#
+#   Crownhaven's east gate
+#     -> THE ROCKY BADLANDS (route): the Redrock road through the red mesas; scrub with wild creatures,
+#        a prospector who battles.
+#     -> REDROCK VILLAGE: villagers TALK about strange people going out into the badlands and the desert
+#        (#46 / #96, dialogue.json); one of them overheard a word (the password's middle).
+#     -> THE RED DESERT (south of Redrock): a HOODED FIGURE. Get close and they hurry off -- FOLLOW them
+#        (three stages, each a trigger near where they stopped); the first time they drop a crumpled
+#        NOTE. At the last they slip into a cave in the cliffs.
+#     -> THE CAVE: it LOOKS LIKE A DEAD END (#96). The rock at the end sounds hollow; SPEAK the PASSWORD
+#        (three words, picked one at a time) and it rolls aside. THE CLUE: the note gives the first and
+#        last words, the Redrock miner the middle one. A wrong answer: nothing happens (try again).
+#     -> THE HIDEOUT: guards who battle in DUELS (#96 "many of the enemies in a battle style") -- three in
+#        the first hall, two more in the depths, each watching the way through.
+#     -> THE END OF THE HIDEOUT: General VARDEN, who has been tracking the place (#57), joins the hero
+#        for the last fight: a TACTICAL battle against the hideout's commander and guards, the General a
+#        GUEST on the hero's side (#96 "joined by an ally"). No base to protect.
+#
+# All lines are short neutral PLACEHOLDERS (TODO(story)); who runs the hideout is the owner's call.
+
+const F_REDROCK_ARRIVED := "redrock.arrived"
+## The hooded figure's flight: noticed you (1), ran again (2), slipped into the cave (entered).
+const F_FIGURE_1 := "badlands.figure_fled_1"
+const F_FIGURE_2 := "badlands.figure_fled_2"
+const F_FIGURE_ENTERED := "badlands.figure_entered"
+## The cave's rock rolled aside (the password was spoken) -- also the hideout's open flag (WORLD_LOCATIONS).
+const F_HIDEOUT_OPEN := "badlands.hideout_open"
+## The password picks so far (1-based word index per slot) -- set as the hero speaks.
+const F_PW_SLOT := "badlands.password.%d"
+## The General arrived at the end of the hideout; the last fight is won.
+const F_VARDEN_ARRIVED := "badlands.varden_arrived"
+const F_HIDEOUT_CLEARED := "badlands.hideout_cleared"
+const HIDEOUT_BATTLE_ID := "badlands.hideout.final"
+## The General is in the hideout from his arrival until the last fight is won (one General at a time).
+const VARDEN_IN_HIDEOUT := "has(\"badlands.varden_arrived\") and not has(\"badlands.hideout_cleared\")"
+
+## THE PASSWORD (#96: "a password you must find or figure out"): three words, spoken in order, each
+## picked from four. KNOBS (TODO(story): placeholder words): the answer, and each slot's choices (the
+## answer among them). The CLUE is split: the note names the first and last, a Redrock miner overheard
+## the middle one.
+const HIDEOUT_PASSWORD: Array[String] = ["Dust", "Ember", "Crown"]
+const HIDEOUT_PW_CHOICES := [
+	["Stone", "Dust", "Sun", "Ash"],
+	["River", "Iron", "Ember", "Night"],
+	["Wolf", "Gate", "Key", "Crown"],
+]
+
+## Battle levels (FIXED, inside the badlands band 22-30): the route's prospector, the hideout's guards
+## (rising as you go in). The last fight SCALES inside the band like a chief's (#80 -- any order).
+const LV_PROSPECTOR := 23
+const LV_HIDEOUT_GUARDS: Array[int] = [23, 24, 24, 25, 26]
+const HIDEOUT_SCALE_OFFSET := 1
+## PLACEHOLDER teams (battle-ready roster stand-ins; #78: villains' creatures are easy to bond with).
+const HIDEOUT_GUARD_TEAMS := [
+	[{"character_id": "tree_grunt", "strength": 0.95}],
+	[{"character_id": "blightcap", "strength": 0.95}, {"character_id": "mycothrall", "strength": 0.9}],
+	[{"character_id": "monster", "strength": 0.95}],
+	[{"character_id": "mycothrall", "strength": 0.95}, {"character_id": "gem_knight", "strength": 0.95}],
+	[{"character_id": "monster", "strength": 1.0}, {"character_id": "blightcap", "strength": 0.95}],
+]
+## The last fight's board, the squad size, and its PLACEHOLDER enemy units in map-spawn order: the
+## commander (the BOSS) first, then the guards and their creatures.
+const HIDEOUT_MAP_PATH := CONTENT + "battles/ow_badlands_hideout.tres"
+const HIDEOUT_SQUAD_SIZE := 3
+const HIDEOUT_UNITS: Array[String] = ["necromancer", "monster", "petalfang", "blightcap"]
+## The ally (#57: the General, or his second in command): a GUEST unit on the hero's side.
+const HIDEOUT_ALLY_UNIT := GENERAL_UNIT
+const HIDEOUT_PURSE := 800
+
+const RB_W := 32
+const RB_H := 14
+const RB_ROAD_Y := 7
+## The mesas along the road (impassable red rock) and the scrub where wild creatures roam.
+const RB_MESAS := [Rect2i(4, 1, 3, 3), Rect2i(10, 9, 4, 3), Rect2i(17, 1, 3, 4), Rect2i(23, 9, 3, 3), Rect2i(27, 2, 2, 3)]
+const RB_SCRUB := [Rect2i(5, 9, 3, 2), Rect2i(14, 2, 3, 2), Rect2i(24, 4, 3, 2)]
+const RB_PROSPECTOR := Vector2i(21, 10)
+
+const RV_W := 26
+const RV_H := 20
+const RV_WEST_Y := 9
+const RV_SOUTH_X := 12
+const RV_HOUSES := [Rect2i(3, 3, 3, 2), Rect2i(17, 4, 3, 2), Rect2i(4, 13, 3, 2), Rect2i(18, 13, 3, 2)]
+const RV_HALL := Rect2i(9, 3, 4, 3)
+const RV_SHRINE := Vector2i(14, 10)
+
+const RD_W := 28
+const RD_H := 18
+const RD_NORTH_X := 12
+## The cave mouth in the eastern cliffs, and where the hero stands coming back out of it.
+const RD_CLIFF_X := 23
+const RD_MOUTH := Vector2i(23, 9)
+## The hooded figure's stops (A -> B -> C -> into the mouth), and the trigger zone around each.
+const RD_FIGURE_STOPS := [Vector2i(8, 5), Vector2i(15, 12), Vector2i(20, 9)]
+const RD_FIGURE_ZONES := [Rect2i(5, 2, 7, 7), Rect2i(12, 10, 7, 5), Rect2i(17, 7, 5, 5)]
+const RD_MESAS := [Rect2i(3, 9, 3, 3), Rect2i(16, 3, 3, 3), Rect2i(9, 14, 3, 2), Rect2i(6, 2, 1, 1)]
+const RD_SCRUB := [Rect2i(2, 13, 4, 3), Rect2i(18, 13, 3, 3), Rect2i(20, 2, 2, 3)]
+
+## The cave: a winding passage to a dead end (the sealed rock), and a side pocket with a chest.
+const BC_W := 14
+const BC_H := 16
+const BC_PATH := [Rect2i(6, 10, 2, 6), Rect2i(6, 10, 6, 2), Rect2i(10, 4, 2, 8), Rect2i(6, 4, 6, 2), Rect2i(6, 2, 2, 3),
+	Rect2i(5, 12, 1, 1), Rect2i(2, 11, 3, 3)]
+const BC_ROCK := Vector2i(7, 1)
+const BC_POCKET_CHEST := Vector2i(2, 12)
+
+## The hideout: two halls (stone floors, timber props), guards watching the way through.
+const HO_W := 16
+const HO_H := 14
+const HO_X := 7
+## [id, cell, facing] of each hall's guards (they watch ACROSS the corridor: the way through is theirs).
+const HO_GUARDS := [
+	["guard_1", Vector2i(5, 10), "east"], ["guard_2", Vector2i(10, 7), "west"], ["guard_3", Vector2i(5, 3), "east"],
+]
+const HD_GUARDS := [
+	["guard_4", Vector2i(10, 9), "west"], ["guard_5", Vector2i(5, 6), "east"],
+]
+## The depths: the commander's chamber at the north end; the trigger in front of it; where the General
+## steps in.
+const HD_COMMANDER := Vector2i(7, 2)
+const HD_TRIGGER := Rect2i(6, 4, 3, 1)
+const HD_VARDEN := Vector2i(8, 5)
+
+
+# --- The Rocky Badlands (route) -------------------------------------------------------
+
+func _rb_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	if (x == 0 or x == RB_W - 1) and y == RB_ROAD_Y:
+		return "sand"
+	if x == 0 or y == 0 or x == RB_W - 1 or y == RB_H - 1:
+		return "mesa_rock"
+	if _in(RB_MESAS, c):
+		return "mesa_rock"
+	if _in(RB_SCRUB, c):
+		return "tall_grass"
+	if y == RB_ROAD_Y:
+		return "sand"
+	return "red_clay"
+
+
+func _build_rocky_badlands() -> void:
+	var t := _new_map("Rocky Badlands", RB_W, RB_H,
+		"The Rocky Badlands: the Redrock road through the red mesas, east of Crownhaven. Story-mode terrain.")
+	t.lighting_preset = "Day"
+	t.environment_preset = "Desert"
+	_paint(t, _rb_terrain)
+	_add_validator_anchors(t, Vector2i(1, RB_ROAD_Y), Vector2i(RB_W - 2, RB_ROAD_Y))
+	_save(t, CONTENT + "areas/rocky_badlands/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"rocky_badlands"
+	a.display_name = "Rocky Badlands"
+	a.kind = OverworldAreaResource.Kind.ROUTE
+	_place(a, "rocky_badlands")
+	a.terrain = load(CONTENT + "areas/rocky_badlands/terrain.tres")
+	a.entry_points = {
+		"west_road": {"cell": [1, RB_ROAD_Y, 0], "facing": "east"},
+		"east_road": {"cell": [RB_W - 2, RB_ROAD_Y, 0], "facing": "west"},
+	}
+	var ents: Array = []
+	for i in range(RB_MESAS.size()):
+		var r: Rect2i = RB_MESAS[i]
+		if r.size.x * r.size.y >= 9:
+			ents.append(_prop("rock_%d" % i, "boulder", Vector2i(r.position.x + r.size.x / 2, r.end.y), Vector2i.ONE,
+				Color(0.58, 0.3, 0.2), true))
+	ents.append(_sign("road_sign", Vector2i(2, RB_ROAD_Y - 1), "The Redrock Road",
+		"EAST: REDROCK VILLAGE\nWEST: CROWNHAVEN"))
+	ents.append(_duel_trainer("badlands", "prospector", RB_PROSPECTOR, "north", "BADLANDS_PROSPECTOR", Color(0.6, 0.44, 0.28),
+		"villager", [{"character_id": "gem_knight", "strength": 0.95}, {"character_id": "monster", "strength": 0.9}],
+		LV_PROSPECTOR, 260, "These mesas are mine to dig! Want to fight me for them?", "Fine, fine. Dig somewhere else."))
+	ents.append(_warp("west_exit", Rect2i(0, RB_ROAD_Y, 1, 1), &"crownhaven", &"east_gate"))
+	ents.append(_warp("east_exit", Rect2i(RB_W - 1, RB_ROAD_Y, 1, 1), &"redrock_village", &"west_road"))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	var zones: Array[Resource] = [_wild_zone(["tall_grass"], [["gem_knight", 2.0], ["monster", 1.5]])]
+	a.encounter_zones = zones
+	_save(a, CONTENT + "areas/rocky_badlands/area.tres")
+
+
+# --- Redrock Village --------------------------------------------------------------------
+
+func _rv_buildings() -> Array:
+	return RV_HOUSES + [RV_HALL]
+
+
+func _rv_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	if x == 0 and y == RV_WEST_Y:
+		return "sand"
+	if x == RV_SOUTH_X and y == RV_H - 1:
+		return "sand"
+	if x == 0 or y == 0 or x == RV_W - 1 or y == RV_H - 1:
+		return "mesa_rock"
+	if _in(_rv_buildings(), c):
+		return "stone_wall"
+	if c == RV_SHRINE:
+		return "sacred_ground"
+	if y == RV_WEST_Y or x == RV_SOUTH_X and y >= RV_WEST_Y:
+		return "sand"
+	if (x <= 1 or x >= RV_W - 2) and _h(x, y, 113) < 0.45:
+		return "mesa_rock"
+	return "red_clay"
+
+
+func _build_redrock_village() -> void:
+	var t := _new_map("Redrock Village", RV_W, RV_H,
+		"Redrock Village: a village among the red mesas of the Rocky Badlands. Story-mode terrain.")
+	t.lighting_preset = "Day"
+	t.environment_preset = "Desert"
+	_paint(t, _rv_terrain)
+	_add_validator_anchors(t, Vector2i(1, RV_WEST_Y), Vector2i(RV_SHRINE.x, RV_SHRINE.y + 1))
+	_save(t, CONTENT + "areas/redrock_village/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"redrock_village"
+	a.display_name = "Redrock Village"
+	a.kind = OverworldAreaResource.Kind.TOWN
+	_place(a, "redrock_village")
+	a.terrain = load(CONTENT + "areas/redrock_village/terrain.tres")
+	a.entry_points = {
+		"west_road": {"cell": [1, RV_WEST_Y, 0], "facing": "east"},
+		"south_trail": {"cell": [RV_SOUTH_X, RV_H - 2, 0], "facing": "north"},
+		"wayshrine": {"cell": [RV_SHRINE.x, RV_SHRINE.y + 1, 0], "facing": "north"},
+	}
+	var ents: Array = []
+	var adobe := Color(0.74, 0.46, 0.32)
+	for i in range(RV_HOUSES.size()):
+		var r: Rect2i = RV_HOUSES[i]
+		ents.append(_prop("house_%d" % i, "house", r.position, r.size, [adobe, adobe.darkened(0.12)][i % 2]))
+	ents.append(_prop("elder_hall", "house", RV_HALL.position, RV_HALL.size, Color(0.62, 0.32, 0.22)))
+	ents.append(_prop("market_tent", "tent", Vector2i(18, 9), Vector2i(2, 1), Color(0.82, 0.62, 0.36)))
+	ents.append(_prop("well", "well", Vector2i(9, 11), Vector2i.ONE, Color(0.58, 0.36, 0.24)))
+	ents.append(_prop("cart", "cart", Vector2i(21, 8), Vector2i.ONE, Color(0.82, 0.62, 0.36)))
+	ents.append(_shrine(RV_SHRINE, "Redrock Wayshrine"))
+	ents.append(_sign("village_sign", Vector2i(2, RV_WEST_Y - 1), "Redrock Village",
+		"REDROCK VILLAGE\nWest: the Redrock road to Crownhaven.  South: the Red Desert."))
+	# The villagers (dialogue.json): the RUMOURS of strange people going out into the badlands and the
+	# desert (#96); the miner overheard the password's middle word.
+	var dust := Color(0.66, 0.46, 0.32)
+	ents.append(_npc("rv_elder", Vector2i(11, 7), "south", "REDROCK_ELDER", dust.lightened(0.1), "elder"))
+	ents.append(_npc("rv_miner", Vector2i(7, 11), "east", "REDROCK_MINER", Color(0.48, 0.4, 0.34), "villager"))
+	ents.append(_npc("rv_trader", Vector2i(18, 10), "west", "REDROCK_TRADER", Color(0.6, 0.5, 0.3), "villager"))
+	ents.append(_npc("rv_watch", Vector2i(RV_SOUTH_X + 1, RV_H - 3), "west", "REDROCK_WATCH", dust.darkened(0.15), "guard"))
+	ents.append(_npc("rv_child", Vector2i(16, 15), "north", "REDROCK_CHILD", Color(0.8, 0.56, 0.4), "child"))
+	ents.append(_warp("west_exit", Rect2i(0, RV_WEST_Y, 1, 1), &"rocky_badlands", &"east_road"))
+	ents.append(_warp("south_exit", Rect2i(RV_SOUTH_X, RV_H - 1, 1, 1), &"red_desert", &"north_trail"))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	a.on_enter = StoryCommand.list([
+		IfCommand.make("not has(\"%s\")" % F_REDROCK_ARRIVED, [_flag(F_REDROCK_ARRIVED)]),
+	])
+	_save(a, CONTENT + "areas/redrock_village/area.tres")
+
+
+# --- The Red Desert: the hooded figure and the cave mouth --------------------------------
+
+func _rd_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	if x == RD_NORTH_X and y == 0:
+		return "sand"
+	if c == RD_MOUTH:
+		return "red_clay"
+	if x >= RD_CLIFF_X or x == 0 or y == 0 or y == RD_H - 1:
+		return "mesa_rock"
+	if _in(RD_MESAS, c):
+		return "mesa_rock"
+	if _in(RD_SCRUB, c):
+		return "tall_grass"
+	return "red_clay" if _h(x, y, 127) < 0.3 else "sand"
+
+
+func _build_red_desert() -> void:
+	var t := _new_map("The Red Desert", RD_W, RD_H,
+		"The Red Desert: sand and red rock south of Redrock Village, under the eastern cliffs. Story-mode terrain.")
+	t.lighting_preset = "Day"
+	t.environment_preset = "Desert"
+	_paint(t, _rd_terrain)
+	_add_validator_anchors(t, Vector2i(RD_NORTH_X, 1), Vector2i(RD_MOUTH.x - 1, RD_MOUTH.y))
+	_save(t, CONTENT + "areas/red_desert/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"red_desert"
+	a.display_name = "The Red Desert"
+	a.kind = OverworldAreaResource.Kind.ROUTE
+	_place(a, "red_desert")
+	a.terrain = load(CONTENT + "areas/red_desert/terrain.tres")
+	a.entry_points = {
+		"north_trail": {"cell": [RD_NORTH_X, 1, 0], "facing": "south"},
+		"cave_mouth": {"cell": [RD_MOUTH.x - 1, RD_MOUTH.y, 0], "facing": "west"},
+	}
+	var ents: Array = []
+	ents.append(_prop("cave_arch", "boulder", Vector2i(RD_MOUTH.x, RD_MOUTH.y - 1), Vector2i.ONE, Color(0.5, 0.26, 0.18), true))
+	ents.append_array(_hooded_figure())
+	ents.append(_warp("north_exit", Rect2i(RD_NORTH_X, 0, 1, 1), &"redrock_village", &"south_trail"))
+	ents.append(_warp("cave_exit", Rect2i(RD_MOUTH.x, RD_MOUTH.y, 1, 1), &"badlands_cave", &"mouth"))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	var zones: Array[Resource] = [_wild_zone(["tall_grass"], [["monster", 2.0], ["gem_knight", 1.5], ["blightcap", 1.0]])]
+	a.encounter_zones = zones
+	_save(a, CONTENT + "areas/red_desert/area.tres")
+
+
+## THE HOODED FIGURE (#96: "follow a person into the cave"): standing at the first stop until the hero
+## comes near, then hurrying on -- three stages (a once-trigger round each stop), the last into the cave
+## mouth, where they vanish for good. The first time they bolt they drop a crumpled NOTE (the clue).
+## Their positions persist (a reload finds them where they stopped). TODO(story): placeholder lines.
+func _hooded_figure() -> Array:
+	var out: Array = []
+	var fig := _npc("hooded_figure", RD_FIGURE_STOPS[0], "south", "HOODED_FIGURE", Color(0.18, 0.14, 0.16), "raider")
+	fig.visible_if = "not has(\"%s\")" % F_FIGURE_ENTERED
+	out.append(fig)
+	var note := _sign("crumpled_note", RD_FIGURE_STOPS[0] + Vector2i(0, 1), "Crumpled Note",
+		"A note, torn and dusty: \"...at the end of the cave, speak the words. First %s ... and last of all, %s.\" The middle of it is torn away." % [
+			HIDEOUT_PASSWORD[0].to_upper(), HIDEOUT_PASSWORD[2].to_upper()], "note")
+	note.visible_if = "has(\"%s\")" % F_FIGURE_1
+	out.append(note)
+	var flags: Array[String] = [F_FIGURE_1, F_FIGURE_2, F_FIGURE_ENTERED]
+	for i in range(RD_FIGURE_STOPS.size()):
+		var to: Vector2i = RD_FIGURE_STOPS[i + 1] if i + 1 < RD_FIGURE_STOPS.size() else RD_MOUTH
+		var zone := TriggerZone.new()
+		zone.id = StringName("figure_flees_%d" % (i + 1))
+		zone.area_rect = RD_FIGURE_ZONES[i]
+		zone.once = false
+		zone.visible_if = ("not has(\"%s\")" % flags[i]) if i == 0 \
+			else "has(\"%s\") and not has(\"%s\")" % [flags[i - 1], flags[i]]
+		# The walk first, then the stage flag (a flag refreshes the world at once: the last one hides them).
+		var steps: Array = [
+			_emote("hooded_figure", "!"),
+			_move("hooded_figure", to, true),
+			_flag(flags[i]),
+		]
+		if i == 0:
+			steps.append(_say([_narr("The hooded figure glances back at you -- and hurries off into the desert. Something flutters to the sand where they stood.")]))
+		elif i == RD_FIGURE_STOPS.size() - 1:
+			steps.append(_say([_narr("The figure slips into a cave in the cliffs.")]))
+		zone.on_step = StoryCommand.list(steps)
+		out.append(zone)
+	return out
+
+
+# --- The cave: the dead end and the password -----------------------------------------------
+
+func _bc_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	if x == BC_PATH[0].position.x and y == BC_H - 1:
+		return "red_clay"
+	# The sealed rock's cell (the way into the hideout once it has rolled aside).
+	if c == BC_ROCK:
+		return "red_clay"
+	if _in(BC_PATH, c):
+		return "red_clay"
+	return "mesa_rock"
+
+
+func _build_badlands_cave() -> void:
+	var entry_x: int = (BC_PATH[0] as Rect2i).position.x
+	var t := _new_map("Desert Cave", BC_W, BC_H,
+		"A cave in the Red Desert's cliffs that seems to end in solid rock. Story-mode terrain.")
+	t.lighting_preset = "Dusk"
+	t.environment_preset = "Desert"
+	_paint(t, _bc_terrain)
+	_add_validator_anchors(t, Vector2i(entry_x, BC_H - 2), Vector2i(BC_ROCK.x, BC_ROCK.y + 1))
+	_save(t, CONTENT + "areas/badlands_cave/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"badlands_cave"
+	a.display_name = "Desert Cave"
+	a.kind = OverworldAreaResource.Kind.DUNGEON
+	_place(a, "red_desert")
+	a.terrain = load(CONTENT + "areas/badlands_cave/terrain.tres")
+	a.entry_points = {
+		"mouth": {"cell": [entry_x, BC_H - 2, 0], "facing": "north"},
+		"hideout": {"cell": [BC_ROCK.x, BC_ROCK.y + 1, 0], "facing": "south"},
+	}
+	var ents: Array = []
+	ents.append(_sealed_rock())
+	ents.append(_chest("pocket_chest", BC_POCKET_CHEST, "east", [&"mossleaf_tonic", &"bitterroot_salve"], 90))
+	ents.append(_warp("mouth_exit", Rect2i(entry_x, BC_H - 1, 1, 1), &"red_desert", &"cave_mouth"))
+	# Where the rock stood (there only once it has rolled aside): the way into the hideout.
+	ents.append(_warp("hideout_door", Rect2i(BC_ROCK.x, BC_ROCK.y, 1, 1), &"badlands_hideout", &"south",
+		"has(\"%s\")" % F_HIDEOUT_OPEN))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	_save(a, CONTENT + "areas/badlands_cave/area.tres")
+
+
+## THE DEAD END (#96): a boulder that sounds hollow. Speak the PASSWORD -- three words, one pick per
+## slot from four -- and it rolls aside for good (F_HIDEOUT_OPEN hides it; the warp behind it opens).
+## A wrong answer: nothing happens; try again. TODO(story): placeholder lines.
+func _sealed_rock() -> PropEntity:
+	var rock := _prop("sealed_rock", "boulder", BC_ROCK, Vector2i.ONE, Color(0.52, 0.28, 0.2), true,
+		"not has(\"%s\")" % F_HIDEOUT_OPEN)
+	rock.verb = "Check"
+	var picks: Array = []
+	var ordinals := ["first", "next", "last"]
+	for slot in range(HIDEOUT_PW_CHOICES.size()):
+		var words: Array = HIDEOUT_PW_CHOICES[slot]
+		var pick := ChoiceCommand.new()
+		pick.prompt = _narr("You speak the %s word..." % ordinals[mini(slot, ordinals.size() - 1)])
+		var opts: Array = []
+		for w in range(words.size()):
+			opts.append(ChoiceOption.make(String(words[w]), [_flag(F_PW_SLOT % (slot + 1), w + 1)]))
+		pick.options = StoryCommand.list(opts)
+		picks.append(pick)
+	var right: Array[String] = []
+	for slot in range(HIDEOUT_PASSWORD.size()):
+		var at: int = (HIDEOUT_PW_CHOICES[slot] as Array).find(HIDEOUT_PASSWORD[slot])
+		if at < 0:
+			push_error("[build_story_content] password word '%s' is not among slot %d's choices" % [HIDEOUT_PASSWORD[slot], slot + 1])
+			_ok = false
+		right.append("flag(\"%s\") == %d" % [F_PW_SLOT % (slot + 1), at + 1])
+	picks.append(IfCommand.make(" and ".join(right), [
+		_say([_narr("A low grinding answers you. The rock shudders -- and rolls aside, onto a passage lit by lamps.")]),
+		_flag(F_HIDEOUT_OPEN),
+		SaveGameCommand.new(),
+	], [
+		_say([_narr("Your voice echoes off the stone. Nothing happens.")]),
+	]))
+	var speak := ChoiceCommand.new()
+	speak.prompt = _narr("A dead end. But this rock is scratched with marks, and it sounds hollow when you knock on it. Say something?")
+	speak.options = StoryCommand.list([
+		ChoiceOption.make("Speak", picks),
+		ChoiceOption.make("Leave it", [], true),
+	])
+	rock.on_interact = StoryCommand.list([speak])
+	return rock
+
+
+# --- The hideout ----------------------------------------------------------------------------
+
+## A hideout hall: rock walls (it is dug into the cliffs) round a broad corridor up the middle with side bays (crates, tents).
+func _ho_terrain(x: int, y: int) -> String:
+	if x == HO_X and (y == 0 or y == HO_H - 1):
+		return "flagstones"
+	if x == 0 or y == 0 or x == HO_W - 1 or y == HO_H - 1:
+		return "mesa_rock"
+	# Rough inner walls dividing the bays from the corridor, open in places.
+	if (x == 3 or x == 12) and y % 4 == 1:
+		return "mesa_rock"
+	return "flagstones" if absi(x - HO_X) <= 1 else "wooden_planks"
+
+
+func _hideout_area(aid: String, nm: String, entries: Dictionary) -> OverworldAreaResource:
+	var t := _new_map(nm, HO_W, HO_H, "%s: the secret hideout behind the desert cave. Story-mode terrain." % nm)
+	t.lighting_preset = "Dusk"
+	_paint(t, _ho_terrain)
+	_add_validator_anchors(t, Vector2i(HO_X, HO_H - 2), Vector2i(HO_X, 1))
+	_save(t, CONTENT + "areas/%s/terrain.tres" % aid)
+	var a := OverworldAreaResource.new()
+	a.area_id = StringName(aid)
+	a.display_name = nm
+	a.kind = OverworldAreaResource.Kind.DUNGEON
+	_place(a, "secret_hideout")
+	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % aid)
+	a.entry_points = entries
+	return a
+
+
+func _ho_props(prefix: String) -> Array:
+	var out: Array = []
+	var canvas := Color(0.42, 0.36, 0.3)
+	out.append(_prop("%s_tent_w" % prefix, "tent", Vector2i(1, 6), Vector2i(2, 1), canvas))
+	out.append(_prop("%s_tent_e" % prefix, "tent", Vector2i(13, 3), Vector2i(2, 1), canvas.darkened(0.1)))
+	for bc in [Vector2i(1, 2), Vector2i(14, 11), Vector2i(1, 12), Vector2i(14, 7)]:
+		out.append(_prop("%s_crates_%d_%d" % [prefix, bc.x, bc.y], "barrels", bc, Vector2i.ONE, Color.WHITE, true))
+	for lc in [Vector2i(5, 1), Vector2i(9, 12)]:
+		var lamp := _prop("%s_lamp_%d_%d" % [prefix, lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(1.0, 0.7, 0.36), true)
+		lamp.glow = 2.5
+		out.append(lamp)
+	return out
+
+
+func _hideout_guard(id: String, cell: Vector2i, facing: String, k: int) -> TrainerEntity:
+	# TODO(story): placeholder lines; generic guards (no named cast).
+	var pre: Array[String] = ["Nobody gets through here!", "How did you find this place?!", "Intruder! Stop right there!",
+		"You won't reach the commander!", "This is as far as you go!"]
+	var after: Array[String] = ["Ugh... the commander won't be happy.", "How...?", "Fine. Go on, then -- see where it gets you.",
+		"You're tougher than you look.", "Go on. The commander's waiting."]
+	return _duel_trainer("hideout", id, cell, facing, "HIDEOUT_GUARD", CINDRAL_RED.darkened(0.2), "raider",
+		HIDEOUT_GUARD_TEAMS[k], LV_HIDEOUT_GUARDS[k], 200 + 20 * k, pre[k], after[k], 4)
+
+
+func _build_hideout() -> void:
+	var a := _hideout_area("badlands_hideout", "Secret Hideout", {
+		"south": {"cell": [HO_X, HO_H - 2, 0], "facing": "north"},
+		"north": {"cell": [HO_X, 1, 0], "facing": "south"},
+	})
+	var ents: Array = []
+	ents.append_array(_ho_props("ho"))
+	for i in range(HO_GUARDS.size()):
+		var g: Array = HO_GUARDS[i]
+		ents.append(_hideout_guard(String(g[0]), g[1], String(g[2]), i))
+	ents.append(_warp("south_exit", Rect2i(HO_X, HO_H - 1, 1, 1), &"badlands_cave", &"hideout"))
+	ents.append(_warp("north_exit", Rect2i(HO_X, 0, 1, 1), &"badlands_hideout_depths", &"south"))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	_save(a, CONTENT + "areas/badlands_hideout/area.tres")
+
+
+func _build_hideout_depths() -> void:
+	var a := _hideout_area("badlands_hideout_depths", "Hideout Depths", {
+		"south": {"cell": [HO_X, HO_H - 2, 0], "facing": "north"},
+	})
+	var ents: Array = []
+	ents.append_array(_ho_props("hd"))
+	for i in range(HD_GUARDS.size()):
+		var g: Array = HD_GUARDS[i]
+		ents.append(_hideout_guard(String(g[0]), g[1], String(g[2]), HO_GUARDS.size() + i))
+	ents.append_array(_hideout_finale())
+	ents.append(_warp("south_exit", Rect2i(HO_X, HO_H - 1, 1, 1), &"badlands_hideout", &"north"))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	_save(a, CONTENT + "areas/badlands_hideout_depths/area.tres")
+
+
+## THE LAST FIGHT (#96 / #57): a TACTICAL battle against the commander and the guards, General Varden a
+## GUEST on the hero's side (a player-0 turn-1 Reinforcement on the board: placed at load, never replaced
+## by the squad pick). SCALED inside the badlands band like a chief's (#80); Try Again on a loss.
+func _hideout_spec() -> BattleSpec:
+	var spec := BattleSpec.new()
+	spec.kind = BattleSpec.Kind.TACTICAL
+	spec.encounter_id = HIDEOUT_BATTLE_ID
+	spec.map_path = HIDEOUT_MAP_PATH
+	spec.squad_size = HIDEOUT_SQUAD_SIZE
+	spec.hero_deploy = BattleSpec.HeroDeploy.REQUIRED
+	spec.ai_difficulty = 1
+	spec.opponent_name = _t("{HIDEOUT_COMMANDER}")
+	spec.opponent_speaker_id = &"npc_commander"
+	var team: Array[Dictionary] = []
+	for cid in HIDEOUT_UNITS:
+		team.append({"character_id": cid, "strength": 1.0})
+	spec.opponent_team = team
+	BattleSpec.make_chief(spec, REGION_BANDS["rocky_badlands"], HIDEOUT_SCALE_OFFSET)
+	spec.reward_gold = HIDEOUT_PURSE
+	var flags: Array[String] = [F_HIDEOUT_CLEARED]
+	spec.reward_flags = flags
+	spec.defeat_policy = BattleSpec.DefeatPolicy.RETRY
+	spec.clash_intro = true
+	return spec
+
+
+## The commander's chamber: the commander (until the hideout is cleared) and the trigger in front of it --
+## the General steps in behind the hero (#57), a few words, and the last fight. After a loss he waits
+## there; talking to him (or the commander) offers the fight again. TODO(story): placeholder lines.
+func _hideout_finale() -> Array:
+	var out: Array = []
+	var commander := _npc("commander", HD_COMMANDER, "south", "HIDEOUT_COMMANDER", CINDRAL_RED, "raider")
+	commander.visible_if = "not has(\"%s\")" % F_HIDEOUT_CLEARED
+	var fight := StartBattleCommand.new()
+	fight.spec = _hideout_spec()
+	fight.source = BattleRequest.SOURCE_SCRIPT
+	var after: Array = [
+		_say([
+			_line("general", "GENERAL", "That's the last of them. Good work, {hero}."),
+			_line("general", "GENERAL", "I'll have my soldiers go through this place. Get some rest."),
+		]),
+		SaveGameCommand.new(),
+	]
+	var offer := ChoiceCommand.new()
+	offer.prompt = _line("general", "GENERAL", "Ready, {hero}? We take them together.")
+	offer.options = StoryCommand.list([
+		ChoiceOption.make("Fight!", [fight, IfCommand.make("outcome() == \"victory\"", after)]),
+		ChoiceOption.make("Not yet.", [], true),
+	])
+	commander.on_interact = StoryCommand.list([IfCommand.make("has(\"%s\")" % F_VARDEN_ARRIVED, [offer])])
+	out.append(commander)
+	# The General: here from his arrival until the fight is won (one General at a time).
+	var general := _npc("general", HD_VARDEN, "north", "GENERAL", ALDERMERE_BLUE, "officer")
+	general.visual_character = VARDEN_MODEL
+	general.visible_if = VARDEN_IN_HIDEOUT
+	general.on_interact = StoryCommand.list([offer])
+	out.append(general)
+	var zone := TriggerZone.new()
+	zone.id = &"commander_chamber"
+	zone.area_rect = HD_TRIGGER
+	zone.once = true
+	zone.visible_if = "not has(\"%s\")" % F_VARDEN_ARRIVED
+	zone.on_step = StoryCommand.list([
+		_face("player", "north"),
+		_say([_line("commander", "HIDEOUT_COMMANDER", "So you found the way in. You won't find the way out.")]),
+		_flag(F_VARDEN_ARRIVED),
+		_emote("player", "!"),
+		_say([
+			_line("general", "GENERAL", "Not alone, they won't. I've been tracking this place for weeks, {hero}."),
+		]),
+		_face("player", "toward:general"),
+		offer,
+	])
+	out.append(zone)
+	return out
+
+
+## The last fight's board: a torch-lit hideout hall. South: your squad chairs and General Varden (a
+## GUEST, player-0 turn-1 Reinforcement); north: the commander (BOSS) and the guards. Eliminate All
+## Enemies -- no base to protect.
+func _build_hideout_battle_map() -> void:
+	var m := _new_map("Hideout Hall", 12, 9,
+		"The commander's hall at the end of the secret hideout in the Red Desert.")
+	m.lighting_preset = "Dusk"
+	m.environment_preset = "Desert"
+	var walls := [Vector2i(0, 0), Vector2i(11, 0), Vector2i(0, 8), Vector2i(11, 8), Vector2i(3, 4), Vector2i(8, 4)]
+	var crates := [Vector2i(1, 2), Vector2i(10, 2), Vector2i(2, 6), Vector2i(9, 6)]
+	_paint(m, func(x: int, y: int) -> String:
+		var c := Vector2i(x, y)
+		if c in walls:
+			return "stone_wall"
+		if c in crates:
+			return "mesa_rock"
+		if x >= 5 and x <= 6:
+			return "flagstones"
+		return "wooden_planks")
+	m.unit_spawns.clear()
+	for c in [Vector2i(4, 7), Vector2i(6, 7), Vector2i(5, 8)]:
+		m.set_character_spawn_at_position(c, 0, String(STARTER_ID))
+	m.set_spawn_point_at_position(Vector2i(7, 8), 0, MapResource.SPAWN_KIND_REINFORCEMENT,
+		{"character_id": HIDEOUT_ALLY_UNIT, "spawn_turn": 1, "max_spawns": 1})
+	var foes := [Vector2i(6, 1), Vector2i(4, 2), Vector2i(8, 2), Vector2i(6, 3)]
+	for i in range(foes.size()):
+		var unit: String = HIDEOUT_UNITS[i % HIDEOUT_UNITS.size()]
+		if i == 0:
+			m.set_character_spawn_at_position(foes[i], 1, unit, "BOSS")
+		else:
+			m.set_character_spawn_at_position(foes[i], 1, unit)
+	var vc: Array[String] = ["Eliminate All Enemies"]
+	m.victory_conditions = vc
+	_save(m, HIDEOUT_MAP_PATH)
+
+
+# =====================================================================================
+#  THE POST-GAME (DECISIONS.md #98-#100)
+# =====================================================================================
+#
+# The post-game begins when the HIDDEN DEPTHS BOSS AWAKENS (#98). Then:
+#   * near STORMREEF ISLE a volcano ERUPTS: a NEW ISLAND rises from the sea south of Beach Village, and a
+#     new LEGEND waits on its crater (#98) -- reached riding the sea move;
+#   * the SNOWY PEAKS are covered in a BLIZZARD (Frostpeak and the high trail north of it), and the storm
+#     has torn away the ice that sealed a cave on the trail: a new LEGEND waits inside (#99);
+#   * separately, after the FINAL BOSS is defeated, a tombstone in the GRAVEYARD on Crownhaven's outskirts
+#     is found pushed aside and the tomb OPEN: it leads down to a new place, with a BOSS at its end (#100).
+# Both triggers are story beats NOT BUILT YET: their flags are knobs here (the Hidden Depths and the final
+# battle set them when they exist). Every line is a short neutral PLACEHOLDER (TODO(story)).
+
+## The post-game's start: the Hidden Depths boss has awakened (TODO: set by the Hidden Depths, not built).
+const F_POSTGAME := "postgame.hidden_depths_awakened"
+## The final boss is defeated (TODO: set by the final battle, not built).
+const F_FINAL_BOSS := "story.final_boss_beaten"
+const POSTGAME := "has(\"postgame.hidden_depths_awakened\")"
+const AFTER_FINAL_BOSS := "has(\"story.final_boss_beaten\")"
+## The post-game's LEVEL BAND (KNOB): the new places' wild creatures, the legends (FIXED above it, #81)
+## and the crypt's boss.
+const POSTGAME_BAND := Vector2i(30, 40)
+
+## The two new legends and the crypt's boss: PLACEHOLDER battle-ready roster units until they are designed
+## (each legend a distinct unit -- a legend bond is one of each).
+const VOLCANO_LEGEND_UNIT := "vineweave"  # PLACEHOLDER legend stand-in (battle-ready, distinct from every other legend / mythical)
+const GLACIER_LEGEND_UNIT := "petalfang"  # PLACEHOLDER legend stand-in (battle-ready, distinct from every other legend / mythical)
+const CRYPT_BOSS_UNIT := "necromancer"
+const CRYPT_MINION_UNITS: Array[String] = ["monster", "petalfang", "blightcap"]
+const LV_LEGEND_SCREEN := 38
+const LV_CRYPT_BOSS := 42
+const LV_CRYPT_MINIONS := 38
+const F_VOLCANO_BEATEN := "postgame.volcano_legend_beaten"
+const F_VOLCANO_BONDED := "legend.volcano.bonded"
+const F_GLACIER_BEATEN := "postgame.glacier_legend_beaten"
+const F_GLACIER_BONDED := "legend.glacier.bonded"
+const F_CRYPT_BOSS_BEATEN := "postgame.crypt_boss_beaten"
+const VOLCANO_BATTLE_ID := "postgame.legend.volcano"
+const GLACIER_BATTLE_ID := "postgame.legend.glacier"
+const CRYPT_BATTLE_ID := "postgame.crypt.boss"
+const GLACIER_MAP_PATH := CONTENT + "battles/ow_glacier_cave.tres"
+const CRYPT_MAP_PATH := CONTENT + "battles/ow_crypt_depths.tres"
+const POSTGAME_SQUAD_SIZE := 4
+
+
+## A post-game LEGEND in the overworld ([param id], roster unit [param unit]): talk -> "Face it?" -> the
+## TACTICAL legend battle ([param spec]) -> on a win the OPTIONAL bond (#75), asked again on later talks.
+func _postgame_legend(id: String, cell: Vector2i, unit: String, spec: BattleSpec, beaten: String, bonded: String,
+		stir: String) -> NpcEntity:
+	var e := NpcEntity.new()
+	e.id = StringName(id)
+	e.cell = Vector3i(cell.x, cell.y, 0)
+	e.facing = "south"
+	e.display_name = _species_name(StringName(unit))
+	e.speaker_name = e.display_name
+	e.visual_character = StringName(unit)
+	e.visible_if = "not has(\"%s\")" % bonded
+	var bond := _bond_offer(unit, bonded, "%s watches you, still. Bond with it?" % e.display_name)
+	var fight := StartBattleCommand.new()
+	fight.spec = spec
+	fight.source = BattleRequest.SOURCE_SCRIPT
+	var face := ChoiceCommand.new()
+	face.prompt = _narr(stir)
+	face.options = StoryCommand.list([
+		ChoiceOption.make("Face it", [fight, IfCommand.make("outcome() == \"victory\"", [bond])]),
+		ChoiceOption.make("Not yet", [], true),
+	])
+	e.on_interact = StoryCommand.list([IfCommand.make("not has(\"%s\")" % beaten, [face], [bond])])
+	return e
+
+
+## A post-game LEGEND's tactical spec: FIXED above the post-game band (#81), Try Again on a loss.
+func _postgame_legend_spec(battle_id: String, map_path: String, unit: String, beaten: String) -> BattleSpec:
+	var spec := BattleSpec.new()
+	spec.kind = BattleSpec.Kind.TACTICAL
+	spec.encounter_id = battle_id
+	spec.map_path = map_path
+	spec.squad_size = POSTGAME_SQUAD_SIZE
+	spec.ai_difficulty = 1
+	spec.opponent_name = _species_name(StringName(unit))
+	var team: Array[Dictionary] = [{"character_id": unit, "strength": 1.0}]
+	spec.opponent_team = team
+	BattleSpec.make_legend(spec, POSTGAME_BAND)
+	var flags: Array[String] = [beaten]
+	spec.reward_flags = flags
+	spec.defeat_policy = BattleSpec.DefeatPolicy.RETRY
+	spec.clash_intro = true
+	return spec
+
+
+## A legend's board: the legend (BOSS) with two screens at [constant LV_LEGEND_SCREEN], your squad
+## chairs to the south; [param painter] paints the ground. Eliminate All Enemies.
+func _postgame_legend_map(path: String, nm: String, desc: String, lighting: String, env: String, unit: String,
+		screen: String, screen_level: int, painter: Callable) -> void:
+	var m := _new_map(nm, 12, 10, desc)
+	m.lighting_preset = lighting
+	m.environment_preset = env
+	_paint(m, painter)
+	m.unit_spawns.clear()
+	for c in [Vector2i(4, 8), Vector2i(6, 8), Vector2i(8, 8), Vector2i(5, 9)]:
+		m.set_character_spawn_at_position(c, 0, String(STARTER_ID))
+	m.set_character_spawn_at_position(Vector2i(6, 2), 1, unit, "BOSS")
+	for c in [Vector2i(3, 3), Vector2i(9, 3)]:
+		m.set_character_spawn_at_position(c, 1, screen)
+		m.unit_spawns[m.unit_spawns.size() - 1]["level"] = screen_level
+	var vc: Array[String] = ["Eliminate All Enemies"]
+	m.victory_conditions = vc
+	_save(m, path)
+
+
+# --- The volcano near Stormreef Isle (#98) -----------------------------------------------
+#
+# STORMREEF WATERS: the open sea south of Beach Village (its sea route), reefs, and the shore of Stormreef
+# Isle along the south edge (its landing stays closed until the isle is built). Two looks of the same
+# water, swapped by the post-game flag (Beach Village's sea route leads to one or the other):
+#   stormreef_waters          -- calm sea;
+#   stormreef_waters_erupted  -- the VOLCANO has erupted: a NEW ISLAND stands in the water, lava in its
+#                                crater, and the new LEGEND on the crater's rim.
+
+const SW_W := 26
+const SW_H := 20
+const SW_NORTH := Rect2i(11, 0, 4, 1)
+const SW_REEFS := [Rect2i(3, 4, 2, 2), Rect2i(21, 2, 2, 1), Rect2i(6, 13, 1, 2), Rect2i(19, 15, 2, 1)]
+## The new island: its shore ring, its slopes, the crater (lava) and the rim cell where the legend waits.
+const SW_ISLAND := Rect2i(13, 5, 9, 8)
+const SW_CRATER := Rect2i(16, 7, 3, 3)
+## The whirlpool to the Island of Tides, in the east of the water.
+const SW_WHIRLPOOL := Vector2i(24, 9)
+## The way up the volcano, on the island's south slope.
+const SW_VOLCANO_DOOR := Vector2i(17, 11)
+const SW_ISLE_SHORE_Y := 18
+
+
+func _sw_terrain(x: int, y: int, erupted: bool) -> String:
+	var c := Vector2i(x, y)
+	if y >= SW_ISLE_SHORE_Y:
+		return "sand"
+	if _in(SW_REEFS, c):
+		return "basalt_column"
+	if erupted and SW_ISLAND.has_point(c):
+		if SW_CRATER.has_point(c):
+			return "molten_lava" if c == SW_CRATER.position + Vector2i(1, 1) else "magma_vent"
+		# A ring of black glass round the crater, ash on the slopes, a sandy landing to the west.
+		var dx: int = mini(x - SW_ISLAND.position.x, SW_ISLAND.end.x - 1 - x)
+		var dy: int = mini(y - SW_ISLAND.position.y, SW_ISLAND.end.y - 1 - y)
+		if dx == 0 or dy == 0:
+			return "deep_water" if (dx == 0 and dy == 0) else "sand"
+		if absi(x - (SW_CRATER.position.x + 1)) <= 2 and absi(y - (SW_CRATER.position.y + 1)) <= 2:
+			return "obsidian"
+		return "ash_field"
+	return "deep_water"
+
+
+func _build_stormreef_waters(erupted: bool) -> void:
+	var aid: String = "stormreef_waters_erupted" if erupted else "stormreef_waters"
+	var t := _new_map("Stormreef Waters", SW_W, SW_H,
+		("The sea off Stormreef Isle after the eruption: a new volcanic island stands in the water." if erupted
+			else "The open sea south of Beach Village, off Stormreef Isle.") + " Story-mode terrain.")
+	t.lighting_preset = "Dusk" if erupted else "Day"
+	_paint(t, func(x: int, y: int) -> String: return _sw_terrain(x, y, erupted))
+	_add_validator_anchors(t, Vector2i(SW_NORTH.position.x, SW_ISLE_SHORE_Y), Vector2i(SW_NORTH.position.x + 2, SW_ISLE_SHORE_Y))
+	_save(t, CONTENT + "areas/%s/terrain.tres" % aid)
+
+	var a := OverworldAreaResource.new()
+	a.area_id = StringName(aid)
+	a.display_name = "Stormreef Waters"
+	a.kind = OverworldAreaResource.Kind.ROUTE
+	_place(a, "stormreef_waters")
+	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % aid)
+	# Arriving by sea (you are riding: a boot on the water keeps the ride), and on the isle's sand.
+	a.entry_points = {
+		"north": {"cell": [SW_NORTH.position.x + 1, 1, 0], "facing": "south"},
+		"shore": {"cell": [SW_NORTH.position.x + 1, SW_ISLE_SHORE_Y, 0], "facing": "east"},
+		# Back from the Island of Tides' currents, on the water east of the whirlpool.
+		"east": {"cell": [SW_WHIRLPOOL.x - 1, SW_WHIRLPOOL.y, 0], "facing": "west"},
+	}
+	if erupted:
+		a.entry_points["volcano_door"] = {"cell": [SW_VOLCANO_DOOR.x, SW_VOLCANO_DOOR.y + 1, 0], "facing": "west"}
+	var ents: Array = []
+	ents.append(_warp("north_exit", SW_NORTH, &"beach_village", &"sea_route"))
+	# The whirlpool that carries you to the Island of Tides (#44 / #103).
+	ents.append_array(_whirlpool("tides_whirlpool", SW_WHIRLPOOL, "island_of_tides", "whirlpool", "", TIDES_WHIRLPOOL_IF))
+	ents.append(_sign("isle_sign", Vector2i(SW_NORTH.position.x + 3, SW_ISLE_SHORE_Y), "Stormreef Isle",
+		"STORMREEF ISLE"))
+	ents.append(_closed_road("isle_landing", Rect2i(0, SW_H - 1, SW_W, 1), "stormreef_isle", StringName(aid), &"shore",
+		"Stormreef Isle's cliffs rise straight from the reef here. There is no way up -- not yet."))  # TODO(story)
+	if erupted:
+		ents.append_array(_volcano_scenery())
+		# The way up the volcano (#105: a straightforward climb to its legend).
+		ents.append(_warp("volcano_path", Rect2i(SW_VOLCANO_DOOR.x, SW_VOLCANO_DOOR.y, 1, 1), &"volcano_path", &"south"))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	_save(a, CONTENT + "areas/%s/area.tres" % aid)
+
+
+func _volcano_scenery() -> Array:
+	var out: Array = []
+	for fc in [Vector2i(15, 7), Vector2i(19, 9), Vector2i(16, 10), Vector2i(19, 6)]:
+		out.append(_prop("lava_fire_%d_%d" % [fc.x, fc.y], "fire", fc, Vector2i.ONE, Color.WHITE, true))
+	for rc in [Vector2i(14, 9), Vector2i(20, 11)]:
+		out.append(_prop("lava_rock_%d_%d" % [rc.x, rc.y], "boulder", rc, Vector2i.ONE, Color(0.16, 0.13, 0.14), true))
+	return out
+
+
+# --- The Snowy Peaks: the blizzard and the hidden cave (#99) -----------------------------
+#
+# THE SNOWY PEAKS (route): the high trail north out of Frostpeak, pines and dark rock, scrub where wild
+# creatures roam. In its northern cliff a cave mouth is SEALED by packed ice and fallen rock. In the
+# post-game a BLIZZARD covers the region (here and Frostpeak: OverworldAreaResource.weather_if) and the
+# storm has torn the ice away: the mouth is open, and the FROZEN CAVE holds the new LEGEND at its end.
+
+const SP_W := 24
+const SP_H := 22
+const SP_SOUTH_X := 11
+## The cliff along the north (dark rock), the sealed cave mouth in it.
+const SP_CLIFF_Y := 2
+const SP_MOUTH := Vector2i(17, 2)
+const SP_SCRUB := [Rect2i(3, 14, 4, 3), Rect2i(15, 12, 4, 3), Rect2i(4, 5, 3, 2)]
+const SP_ICE := [Rect2i(13, 6, 4, 2)]
+
+
+func _sp_trail(x: int, y: int) -> bool:
+	# Up from Frostpeak, a bend east, and on to the cave mouth.
+	if x == SP_SOUTH_X and y >= 9:
+		return true
+	if y == 9 and x >= SP_SOUTH_X and x <= SP_MOUTH.x:
+		return true
+	return x == SP_MOUTH.x and y >= SP_CLIFF_Y and y <= 9
+
+
+func _sp_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	if x == SP_SOUTH_X and y == SP_H - 1:
+		return "frozen_tundra"
+	if c == SP_MOUTH:
+		return "frozen_tundra"
+	if y <= SP_CLIFF_Y:
+		return "basalt_column"
+	if x == 0 or x == SP_W - 1 or y == SP_H - 1:
+		return "frozen_pine"
+	if _sp_trail(x, y):
+		return "frozen_tundra"
+	if _in(SP_SCRUB, c):
+		return "tall_grass"
+	if _in(SP_ICE, c):
+		return "ice_sheet"
+	if absi(x - SP_SOUTH_X) > 1 and _h(x, y, 151) < 0.18:
+		return "frozen_pine"
+	return "snow_field"
+
+
+func _build_snowy_peaks() -> void:
+	var t := _new_map("The Snowy Peaks", SP_W, SP_H,
+		"The Snowy Peaks: the high trail north of Frostpeak Village. Story-mode terrain.")
+	t.lighting_preset = "Day"
+	t.environment_preset = "Snow"
+	_paint(t, _sp_terrain)
+	_add_validator_anchors(t, Vector2i(SP_SOUTH_X, SP_H - 2), Vector2i(SP_MOUTH.x, SP_MOUTH.y + 1))
+	_save(t, CONTENT + "areas/snowy_peaks/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"snowy_peaks"
+	a.display_name = "The Snowy Peaks"
+	a.kind = OverworldAreaResource.Kind.ROUTE
+	_place(a, "snowy_peaks")
+	a.terrain = load(CONTENT + "areas/snowy_peaks/terrain.tres")
+	a.weather_alt = "blizzard"
+	a.weather_if = POSTGAME
+	a.entry_points = {
+		"south_trail": {"cell": [SP_SOUTH_X, SP_H - 2, 0], "facing": "north"},
+		"cave_mouth": {"cell": [SP_MOUTH.x, SP_MOUTH.y + 1, 0], "facing": "south"},
+	}
+	var ents: Array = []
+	ents.append(_sign("trail_sign", Vector2i(SP_SOUTH_X + 1, SP_H - 3), "The Snowy Peaks",
+		"THE HIGH TRAIL\nSouth: Frostpeak Village."))
+	# The SEALED mouth until the post-game's blizzard tears the ice away (#99).
+	var seal := _prop("ice_seal", "boulder", SP_MOUTH, Vector2i.ONE, Color(0.72, 0.82, 0.92), true, "not (%s)" % POSTGAME)
+	seal.on_interact = StoryCommand.list([
+		_say([_narr("A wall of packed ice and fallen rock seals what might once have been a cave. It will not budge.")]),  # TODO(story)
+	])
+	ents.append(seal)
+	ents.append(_warp("cave_exit", Rect2i(SP_MOUTH.x, SP_MOUTH.y, 1, 1), &"glacier_cave", &"mouth", POSTGAME))
+	ents.append(_warp("south_exit", Rect2i(SP_SOUTH_X, SP_H - 1, 1, 1), &"frostpeak_village", &"north_trail"))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	var zones: Array[Resource] = [_wild_zone(["tall_grass"], [["gem_knight", 1.5], ["mycothrall", 1.0], ["monster", 1.0]])]
+	a.encounter_zones = zones
+	_save(a, CONTENT + "areas/snowy_peaks/area.tres")
+
+
+func _build_glacier_map() -> void:
+	_postgame_legend_map(GLACIER_MAP_PATH, "The Frozen Cave",
+		"The ice-bound chamber at the end of the cave on the Snowy Peaks.", "Dusk", "Snow",
+		GLACIER_LEGEND_UNIT, "gem_knight", LV_LEGEND_SCREEN, func(x: int, y: int) -> String:
+			var c := Vector2i(x, y)
+			if c in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(10, 0), Vector2i(11, 0), Vector2i(0, 9), Vector2i(11, 9),
+					Vector2i(2, 5), Vector2i(9, 5)]:
+				return "frozen_pine"
+			if y <= 4 and absi(x - 6) <= 3:
+				return "ice_sheet"
+			return "snow_field")
+
+
+# --- The graveyard on Crownhaven's outskirts and the crypt below it (#100) ----------------
+#
+# CROWNHAVEN GRAVEYARD: off the Sparse Forest's east end, just outside the city's west gate -- rows of
+# gravestones, a gravekeeper. Once the FINAL BOSS is defeated, one headstone is found pushed aside and
+# its tomb OPEN: steps down to THE OLD CRYPT (a new place), restless dead in its halls, and a BOSS at its
+# end (a tactical battle).
+
+const GY_W := 20
+const GY_H := 16
+const GY_SOUTH_X := 10
+const GY_ROWS: Array[int] = [4, 7, 10]
+const GY_COLS: Array[int] = [4, 6, 8, 12, 14, 16]
+## The grave that opens (one of the rows'), and where its headstone ends up.
+const GY_OPEN := Vector2i(6, 7)
+const GY_MOVED := Vector2i(5, 6)
+const GY_CHAPEL := Rect2i(8, 1, 4, 2)
+const GY_KEEPER := Vector2i(13, 13)
+## TODO(story): placeholder epitaphs (no names -- nobody buried here is anyone the owner named).
+const GY_EPITAPHS: Array[String] = ["The name has worn away.", "Rest well.", "Gone on ahead.",
+	"The letters are too weathered to read.", "Remembered."]
+
+
+
+func _gy_terrain(x: int, y: int) -> String:
+	var c := Vector2i(x, y)
+	if x == GY_SOUTH_X and y == GY_H - 1:
+		return "forest_dirt"
+	if x == 0 or y == 0 or x == GY_W - 1 or y == GY_H - 1:
+		return "tree"
+	if GY_CHAPEL.has_point(c):
+		return "stone_wall"
+	if x == GY_SOUTH_X and y >= GY_CHAPEL.end.y:
+		return "forest_dirt"
+	if y in [5, 8, 11] and x >= 3 and x <= GY_W - 4:
+		return "forest_dirt"
+	return "grass_plains"
+
+
+func _build_graveyard() -> void:
+	var t := _new_map("Crownhaven Graveyard", GY_W, GY_H,
+		"Crownhaven's graveyard, on the city's outskirts beyond the west gate. Story-mode terrain.")
+	t.lighting_preset = "Dusk"
+	_paint(t, _gy_terrain)
+	_add_validator_anchors(t, Vector2i(GY_SOUTH_X, GY_H - 2), Vector2i(GY_SOUTH_X, GY_CHAPEL.end.y))
+	_save(t, CONTENT + "areas/crownhaven_graveyard/terrain.tres")
+
+	var a := OverworldAreaResource.new()
+	a.area_id = &"crownhaven_graveyard"
+	a.display_name = "Crownhaven Graveyard"
+	a.kind = OverworldAreaResource.Kind.ROUTE
+	_place(a, "crownhaven_graveyard")
+	a.terrain = load(CONTENT + "areas/crownhaven_graveyard/terrain.tres")
+	a.entry_points = {
+		"south_gate": {"cell": [GY_SOUTH_X, GY_H - 2, 0], "facing": "north"},
+		"tomb": {"cell": [GY_OPEN.x, GY_OPEN.y + 1, 0], "facing": "north"},
+	}
+	var ents: Array = []
+	ents.append(_prop("gy_chapel", "chapel", GY_CHAPEL.position, GY_CHAPEL.size, Color(0.34, 0.34, 0.4)))
+	ents.append(_prop("gy_fence_w", "fence", Vector2i(1, 13), Vector2i(8, 1), Color(0.2, 0.2, 0.22)))
+	ents.append(_prop("gy_fence_e", "fence", Vector2i(12, 13), Vector2i(1, 1), Color(0.2, 0.2, 0.22)))
+	var k: int = 0
+	for y in GY_ROWS:
+		for x in GY_COLS:
+			var cell := Vector2i(x, y)
+			var stone := _sign("grave_%d_%d" % [x, y], cell, "Gravestone", GY_EPITAPHS[k % GY_EPITAPHS.size()], "grave")
+			stone.tint = Color(0.56, 0.56, 0.54).darkened(0.08 * float(k % 3))
+			if cell == GY_OPEN:
+				# The grave that opens after the final boss (#100).
+				stone.id = &"old_grave"
+				stone.text = "An old headstone, its letters worn smooth."  # TODO(story)
+				stone.visible_if = "not (%s)" % AFTER_FINAL_BOSS
+			ents.append(stone)
+			k += 1
+	var moved := _sign("old_grave_moved", GY_MOVED, "Gravestone",
+		"This headstone has been dragged out of its place. The grave beside it lies open.", "grave")  # TODO(story)
+	moved.visible_if = AFTER_FINAL_BOSS
+	ents.append(moved)
+	ents.append(_prop("open_tomb", "tomb", GY_OPEN, Vector2i.ONE, Color(0.5, 0.5, 0.48), false, AFTER_FINAL_BOSS))
+	ents.append(_warp("tomb_stairs", Rect2i(GY_OPEN.x, GY_OPEN.y, 1, 1), &"old_crypt", &"stairs", AFTER_FINAL_BOSS))
+	ents.append(_npc("gravekeeper", GY_KEEPER, "west", "GRAVEKEEPER", Color(0.3, 0.3, 0.34), "elder"))
+	ents.append(_warp("south_exit", Rect2i(GY_SOUTH_X, GY_H - 1, 1, 1), &"sparse_forest", &"graveyard_path"))
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	_save(a, CONTENT + "areas/crownhaven_graveyard/area.tres")
+
+
+## THE CRYPT'S BOSS (#100): at the end of the crypt -- a TACTICAL battle (its minions on the board), FIXED
+## at [constant LV_CRYPT_BOSS], Try Again on a loss. Who it is is the owner's call: a PLACEHOLDER unit.
+func _crypt_spec() -> BattleSpec:
+	var spec := BattleSpec.new()
+	spec.kind = BattleSpec.Kind.TACTICAL
+	spec.encounter_id = CRYPT_BATTLE_ID
+	spec.map_path = CRYPT_MAP_PATH
+	spec.squad_size = POSTGAME_SQUAD_SIZE
+	spec.ai_difficulty = 1
+	spec.opponent_name = _species_name(StringName(CRYPT_BOSS_UNIT))
+	var team: Array[Dictionary] = [{"character_id": CRYPT_BOSS_UNIT, "strength": 1.0}]
+	for u in CRYPT_MINION_UNITS:
+		team.append({"character_id": u, "strength": 1.0})
+	spec.opponent_team = team
+	spec.enemy_level = LV_CRYPT_BOSS
+	spec.boss_battle = true
+	var flags: Array[String] = [F_CRYPT_BOSS_BEATEN]
+	spec.reward_flags = flags
+	spec.defeat_policy = BattleSpec.DefeatPolicy.RETRY
+	spec.clash_intro = true
+	return spec
+
+
+## The crypt boss's board: a pillared burial hall. The boss (BOSS) and its minions to the north, your
+## squad chairs to the south. Eliminate All Enemies.
+func _build_crypt_map() -> void:
+	var m := _new_map("The Crypt's End", 12, 10, "The burial hall at the end of the Old Crypt.")
+	m.lighting_preset = "Night"
+	var pillars := [Vector2i(3, 2), Vector2i(8, 2), Vector2i(3, 6), Vector2i(8, 6), Vector2i(0, 0), Vector2i(11, 0)]
+	_paint(m, func(x: int, y: int) -> String:
+		var c := Vector2i(x, y)
+		if c in pillars:
+			return "basalt_column"
+		if (x == 1 or x == 10) and y >= 3 and y <= 5:
+			return "ash_field"
+		return "flagstones")
+	m.unit_spawns.clear()
+	for c in [Vector2i(4, 8), Vector2i(6, 8), Vector2i(8, 8), Vector2i(5, 9)]:
+		m.set_character_spawn_at_position(c, 0, String(STARTER_ID))
+	m.set_character_spawn_at_position(Vector2i(6, 1), 1, CRYPT_BOSS_UNIT, "BOSS")
+	var mc := [Vector2i(4, 3), Vector2i(7, 3), Vector2i(6, 4)]
+	for i in range(CRYPT_MINION_UNITS.size()):
+		m.set_character_spawn_at_position(mc[i], 1, CRYPT_MINION_UNITS[i])
+		m.unit_spawns[m.unit_spawns.size() - 1]["level"] = LV_CRYPT_MINIONS
+	var vc: Array[String] = ["Eliminate All Enemies"]
+	m.victory_conditions = vc
+	_save(m, CRYPT_MAP_PATH)
+
+
+# =====================================================================================
+#  THE DUNGEONS -- the areas before the big battles (DECISIONS.md #101-#106)
+# =====================================================================================
+#
+# Each floor is laid out as an ASCII map (one string per row; a char per cell): the shapes are
+# readable here and every floor is checked by the tests (reachability, the ice puzzles' solutions).
+#   * the ICE dungeon (the Frozen Cave, #102): two SLIDE floors (OverworldAreaResource.slide_tiles) --
+#     slide until a rock stops you; a wrong slide drops you through a crack back to the floor's start;
+#     the right one ends in a HOLE down to the next level -- then the legend's chamber;
+#   * the SEA dungeon (the Island of Tides, #44 / #103): reached through a WHIRLPOOL off Stormreef Isle;
+#     its caves go DOWN through whirlpools in small lakes and holes in the floor -- some holes lead back
+#     UP (backtrack) -- to the depths, where the legend waits (a tactical battle);
+#   * the UNDERWORLD (the Old Crypt, #104): fairly straightforward, tough wild creatures, two MINI
+#     BOSSES (duels) barring the way, then its boss (tactical);
+#   * the VOLCANO (#105): a straightforward climb up the new island's volcano; its legend is an
+#     ENCOUNTER battle (a duel, no tactical);
+#   * the HIDDEN DEPTHS (#106): longer and straightforward -- epic ruins hidden in a cave, many strong
+#     wild creatures -- and the boss whose AWAKENING begins the post-game (#98): beating it sets
+#     F_POSTGAME. Its way in (Mountain Base) is not built yet.
+# All lines are short neutral PLACEHOLDERS (TODO(story)); the units are battle-ready stand-ins.
+
+## An area's ground from ASCII [param rows] ([param tiles]: char -> tile id; anything else -> [param fallback]).
+func _paint_ascii(m: MapResource, rows: Array, tiles: Dictionary, fallback: String) -> void:
+	_paint(m, func(x: int, y: int) -> String: return String(tiles.get(String(rows[y])[x], fallback)))
+
+
+## Every cell of [param ch] in ASCII [param rows], row by row.
+static func _ascii_cells(rows: Array, ch: String) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for y in range(rows.size()):
+		var row: String = String(rows[y])
+		for x in range(row.length()):
+			if row[x] == ch:
+				out.append(Vector2i(x, y))
+	return out
+
+
+## One DUNGEON FLOOR from ASCII: terrain + area (kind DUNGEON, placed at [param location], [param band]
+## when not ZERO), entries {id: [Vector2i, facing]}, the entities and zones given.
+func _dungeon_floor(aid: String, nm: String, location: String, rows: Array, tiles: Dictionary, fallback: String,
+		lighting: String, env: String, band: Vector2i, entries: Dictionary, ents: Array, zones: Array = [],
+		slide: Array = []) -> OverworldAreaResource:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT + "areas/" + aid))
+	var w: int = String(rows[0]).length()
+	var t := _new_map(nm, w, rows.size(), "%s: a dungeon floor. Story-mode terrain." % nm)
+	t.lighting_preset = lighting
+	t.environment_preset = env
+	_paint_ascii(t, rows, tiles, fallback)
+	var keys: Array = entries.keys()
+	var e0: Vector2i = entries[keys[0]][0]
+	var e1: Vector2i = entries[keys[keys.size() - 1]][0]
+	if e1 == e0:
+		# One entry: the second anchor on an open neighbour of it.
+		for d in OverworldGrid.DIRS:
+			var n: Vector2i = e0 + d
+			if n.y >= 0 and n.y < rows.size() and n.x >= 0 and n.x < w \
+					and String(tiles.get(String(rows[n.y])[n.x], fallback)) != fallback:
+				e1 = n
+				break
+	_add_validator_anchors(t, e0, e1)
+	_save(t, CONTENT + "areas/%s/terrain.tres" % aid)
+	var a := OverworldAreaResource.new()
+	a.area_id = StringName(aid)
+	a.display_name = nm
+	a.kind = OverworldAreaResource.Kind.DUNGEON
+	_place(a, location)
+	if band != Vector2i.ZERO:
+		a.level_band = band
+	a.terrain = load(CONTENT + "areas/%s/terrain.tres" % aid)
+	var ep: Dictionary = {}
+	for k in entries:
+		var c: Vector2i = entries[k][0]
+		ep[k] = {"cell": [c.x, c.y, 0], "facing": String(entries[k][1])}
+	a.entry_points = ep
+	var st: Array[StringName] = []
+	for s in slide:
+		st.append(StringName(String(s)))
+	a.slide_tiles = st
+	_add_doors(a, ents)
+	a.entities = _entities(ents)
+	var zs: Array[Resource] = []
+	for z in zones:
+		zs.append(z)
+	a.encounter_zones = zs
+	_save(a, CONTENT + "areas/%s/area.tres" % aid)
+	return a
+
+
+## A HOLE in the floor at [param c] (a "hole" prop + its warp): down (or up) to [param target] / [param entry].
+func _hole(id: String, c: Vector2i, target: String, entry: String, toast: String = "", tint: Color = Color(0.5, 0.56, 0.62)) -> Array:
+	var w := _warp(id, Rect2i(c.x, c.y, 1, 1), StringName(target), StringName(entry))
+	w.arrival_toast = toast
+	return [_prop(id + "_pit", "hole", c, Vector2i.ONE, tint), w]
+
+
+## A forced-looking but optional MINI BOSS (#104): a strong creature barring the way at [param c] -- talk ->
+## a DUEL at [param level] (a loss whites out: it waits); won, it is gone for good ([param flag]).
+func _mini_boss(id: String, c: Vector2i, unit: String, level: int, flag: String, stir: String) -> NpcEntity:
+	var e := NpcEntity.new()
+	e.id = StringName(id)
+	e.cell = Vector3i(c.x, c.y, 0)
+	e.facing = "south"
+	e.display_name = _species_name(StringName(unit))
+	e.speaker_name = e.display_name
+	e.visual_character = StringName(unit)
+	e.visible_if = "not has(\"%s\")" % flag
+	var spec := _duel_spec(id.replace("_", "."), e.display_name, StringName("npc_" + id),
+		[{"character_id": unit, "strength": MINI_BOSS_STRENGTH}], false, BattleSpec.DefeatPolicy.WHITEOUT, 0, [], [flag])
+	spec.enemy_level = level
+	spec.boss_battle = true
+	spec.clash_intro = true
+	var ask := ChoiceCommand.new()
+	ask.prompt = _narr(stir)
+	ask.options = StoryCommand.list([ChoiceOption.make("Fight", [_duel(spec)]), ChoiceOption.make("Not yet", [], true)])
+	e.on_interact = StoryCommand.list([ask])
+	return e
+
+
+## A legend in its lair -- talk -> "Face it?" -> the [param spec] battle (tactical or a duel) -> the
+## OPTIONAL bond (#75), asked again on later talks. (The post-game's helper with its own spec.)
+func _lair_legend(id: String, c: Vector2i, unit: String, spec: BattleSpec, beaten: String, bonded: String,
+		stir: String) -> NpcEntity:
+	return _postgame_legend(id, c, unit, spec, beaten, bonded, stir)
+
+
+## The strength multiplier of a dungeon's mini bosses (KNOB).
+const MINI_BOSS_STRENGTH := 1.25
+
+
+# --- THE ICE DUNGEON: the Frozen Cave (#102) -------------------------------------------------
+#
+# Floor 1: slide from the cave mouth across the ice to the HOLE in the north wall; floor 2 (where the
+# hole drops you): slide down to the hole in the south wall; floor 3: the legend's chamber. A crack
+# (X) a wrong slide ends in drops you back to the floor's start. Solved by the shortest route in 10
+# and 9 slides (generated, then checked by test_dungeons.gd). '.' ground, 'I' ice, 'R' rock, 'X' a
+# crack, 'H' the hole down, 'S' the start, 'U' a ladder back up.
+
+const GC_TILES := {"#": "basalt_column", ".": "frozen_tundra", "S": "frozen_tundra", "U": "frozen_tundra",
+	"H": "frozen_tundra", "I": "ice_sheet", "R": "ice_sheet", "X": "ice_sheet", "M": "frozen_tundra"}
+const GC_FLOOR_1 := [
+	"###############",
+	"###H###########",
+	"#IIIIRIIRIIIII#",
+	"#RIIIRIXIIIIII#",
+	"#IIIIIIIIIIIII#",
+	"#IXIIIRIIIIIII#",
+	"#IIIIIIIIRIIII#",
+	"#IRIIIIIIXIIII#",
+	"#IIIIIIRIIIIRI#",
+	"#XRRIIRIRIIIII#",
+	"#......S......#",
+	"#######M#######",
+]
+const GC_FLOOR_2 := [
+	"#U#############",
+	"#......S......#",
+	"#IIIIIIIIIRIII#",
+	"#IRIIIIRIRIIII#",
+	"#IIIIIIIIIIIIR#",
+	"#IIIIIIRIIIIIR#",
+	"#IIIIIIIIIIXII#",
+	"#XRIRIIRRIIIII#",
+	"#IIRIIIIIIIIII#",
+	"#IIIRIRIIIIIXI#",
+	"##########H####",
+	"###############",
+]
+const GC_CHAMBER := [
+	"################",
+	"######....######",
+	"#####......#####",
+	"####IIIIIIII####",
+	"###.IIIIIIII.###",
+	"###..IIIIII..###",
+	"####........####",
+	"#####..U...#####",
+	"################",
+]
+const GC_SLIP_TOAST := "You slip into a crack in the ice and tumble back down the slope..."  # TODO(story)
+
+
+## The ice floors: the rocks (boulder props on 'R'), the cracks (holes back to the start), the hole
+## down, the ladder up -- built from the ASCII rows.
+func _ice_floor(aid: String, rows: Array, entries: Dictionary, down: Array, up: Array, start_entry: String) -> void:
+	var ents: Array = []
+	for c in _ascii_cells(rows, "R"):
+		ents.append(_prop("rock_%d_%d" % [c.x, c.y], "boulder", c, Vector2i.ONE, Color(0.62, 0.7, 0.78), true))
+	var k: int = 0
+	for c in _ascii_cells(rows, "X"):
+		ents.append_array(_hole("crack_%d" % k, c, aid, start_entry, GC_SLIP_TOAST, Color(0.72, 0.84, 0.94)))
+		k += 1
+	if not down.is_empty():
+		for c in _ascii_cells(rows, "H"):
+			ents.append_array(_hole("hole_down", c, String(down[0]), String(down[1])))
+	if not up.is_empty():
+		for c in _ascii_cells(rows, "U"):
+			ents.append(_warp("ladder_up", Rect2i(c.x, c.y, 1, 1), StringName(String(up[0])), StringName(String(up[1]))))
+	for c in _ascii_cells(rows, "M"):
+		ents.append(_warp("mouth_exit", Rect2i(c.x, c.y, 1, 1), &"snowy_peaks", &"cave_mouth"))
+	_dungeon_floor(aid, "Frozen Cave", "frozen_cave", rows, GC_TILES, "basalt_column", "Dusk", "Snow", POSTGAME_BAND,
+		entries, ents, [], ["ice_sheet"])
+
+
+func _build_glacier_cave() -> void:
+	_ice_floor("glacier_cave", GC_FLOOR_1, {"mouth": [Vector2i(7, 10), "north"]},
+		["glacier_cave_2", "drop"], [], "mouth")
+	# Floor 2: the hole drops you on the north strip; the ladder climbs back to floor 1's start.
+	_ice_floor("glacier_cave_2", GC_FLOOR_2, {"drop": [Vector2i(7, 1), "south"]},
+		["glacier_cave_3", "drop"], ["glacier_cave", "mouth"], "drop")
+	# The legend's chamber (its ice is only ice: no slide here).
+	var ents: Array = []
+	ents.append(_warp("ladder_up", Rect2i(7, 7, 1, 1), &"glacier_cave", &"mouth"))
+	for cc in [Vector2i(4, 4), Vector2i(11, 4)]:
+		var cr := _prop("ice_crystal_%d_%d" % [cc.x, cc.y], "crystal", cc, Vector2i.ONE, Color(0.62, 0.86, 1.0), true)
+		cr.glow = 2.5
+		ents.append(cr)
+	ents.append(_postgame_legend("glacier_legend", Vector2i(7, 1), GLACIER_LEGEND_UNIT,
+		_postgame_legend_spec(GLACIER_BATTLE_ID, GLACIER_MAP_PATH, GLACIER_LEGEND_UNIT, F_GLACIER_BEATEN),
+		F_GLACIER_BEATEN, F_GLACIER_BONDED,
+		"Frost creeps across the floor toward you, and the ice itself seems to breathe. Face it?"))  # TODO(story)
+	_dungeon_floor("glacier_cave_3", "Frozen Cave", "frozen_cave", GC_CHAMBER, GC_TILES, "basalt_column", "Dusk", "Snow",
+		POSTGAME_BAND, {"drop": [Vector2i(8, 6), "north"]}, ents)
+
+
+# --- THE VOLCANO (#105): a straightforward climb, an encounter battle at the top --------------
+
+const VP_TILES := {"#": "basalt_column", ".": "ash_field", ",": "obsidian", "L": "molten_lava", "V": "magma_vent"}
+const VOLCANO_PATH := [
+	"######,#######",
+	"######,,######",
+	"####VV.,.#####",
+	"###...,..LL###",
+	"##..L.,...L.##",
+	"##.LL.,,....##",
+	"##....LL,,..##",
+	"###V.LL..,.###",
+	"###..L..,,..##",
+	"##..,,,,,.L.##",
+	"##.,,LLL...V##",
+	"##.,.LLL.....#",
+	"##.,,.....L..#",
+	"###.,,,,..LL.#",
+	"####..L,,....#",
+	"###....L,,..##",
+	"####.....,.###",
+	"#####...,,####",
+	"######.,.#####",
+	"#######,######",
+]
+const VOLCANO_CRATER := [
+	"##############",
+	"#####,,,,#####",
+	"####,,,,,,####",
+	"###,,LLLL,,###",
+	"##,,LLLLLL,,##",
+	"##,,LLLLLL,,##",
+	"##,,,LLLL,,,##",
+	"###,,,,,,,,###",
+	"####...,...###",
+	"#####..,..####",
+	"######.,.#####",
+	"#######,######",
+]
+const VOLCANO_DUEL_ID := "postgame.legend.volcano"
+
+
+## THE VOLCANO'S LEGEND (#105): an ENCOUNTER battle -- a DUEL, FIXED above the post-game band like a
+## legend (#81). A loss whites out (it waits); won, the optional bond.
+func _volcano_spec() -> BattleSpec:
+	var spec := _duel_spec(VOLCANO_DUEL_ID, _species_name(StringName(VOLCANO_LEGEND_UNIT)),
+		StringName("npc_volcano_legend"), [{"character_id": VOLCANO_LEGEND_UNIT, "strength": 1.0}], false,
+		BattleSpec.DefeatPolicy.WHITEOUT, 0, [], [F_VOLCANO_BEATEN])
+	BattleSpec.make_legend(spec, POSTGAME_BAND)
+	spec.clash_intro = true
+	return spec
+
+
+func _build_volcano() -> void:
+	var ents: Array = []
+	for fc in [Vector2i(5, 2), Vector2i(10, 3), Vector2i(10, 13)]:
+		ents.append(_prop("vent_fire_%d_%d" % [fc.x, fc.y], "fire", fc, Vector2i.ONE, Color.WHITE, true))
+	ents.append(_warp("south_exit", Rect2i(7, 19, 1, 1), &"stormreef_waters_erupted", &"volcano_door"))
+	ents.append(_warp("north_exit", Rect2i(6, 0, 1, 1), &"volcano_crater", &"south"))
+	_dungeon_floor("volcano_path", "The Volcano", "stormreef_waters", VOLCANO_PATH, VP_TILES, "basalt_column", "Dusk",
+		"Volcanic", POSTGAME_BAND, {"south": [Vector2i(7, 18), "north"], "north": [Vector2i(6, 1), "south"]}, ents,
+		[_wild_zone(["ash_field"], [["monster", 2.0], ["blightcap", 1.0]])])
+	var crater: Array = []
+	for fc in [Vector2i(5, 4), Vector2i(8, 5)]:
+		crater.append(_prop("rim_fire_%d_%d" % [fc.x, fc.y], "fire", fc, Vector2i.ONE, Color.WHITE, true))
+	crater.append(_postgame_legend("volcano_legend", Vector2i(7, 1), VOLCANO_LEGEND_UNIT, _volcano_spec(),
+		F_VOLCANO_BEATEN, F_VOLCANO_BONDED,
+		"Heat rolls off the crater, and something vast stirs in the glow. Face it?"))  # TODO(story)
+	crater.append(_warp("south_exit", Rect2i(7, 11, 1, 1), &"volcano_path", &"north"))
+	_dungeon_floor("volcano_crater", "The Volcano's Crater", "stormreef_waters", VOLCANO_CRATER, VP_TILES, "basalt_column",
+		"Dusk", "Volcanic", POSTGAME_BAND, {"south": [Vector2i(7, 10), "north"]}, crater)
+
+
+# --- THE UNDERWORLD: the Old Crypt (#104) ---------------------------------------------------
+#
+# Two halls, fairly straightforward: restless creatures in the ash ('s'), a MINI BOSS in each hall's
+# doorway north (a duel), and the boss in the chamber at the end (tactical). ':' the walkway.
+
+const CR_TILES := {"#": "basalt_column", ".": "flagstones", ":": "flagstones", "s": "ash_field"}
+const CRYPT_HALL := [
+	"#########:########",
+	"#########:########",
+	"######.##:##.#####",
+	"#..............#.#",
+	"#.ss#...:...#ss..#",
+	"#.ss....:....ss..#",
+	"#...#...:...#....#",
+	"#.......:........#",
+	"#...#...:...#....#",
+	"#.ss....:....ss..#",
+	"#.ss#...:...#ss..#",
+	"#.......:........#",
+	"#...#...:...#....#",
+	"#.......:........#",
+	"#...#...:...#....#",
+	"#.......:........#",
+	"#.......:........#",
+	"#########:########",
+]
+const CRYPT_DEPTHS := [
+	"########:#########",
+	"########:#########",
+	"#####.##:##.######",
+	"#####.......######",
+	"########:#########",
+	"#..ss...:...ss...#",
+	"#..ss.#.:.#.ss...#",
+	"#.......:........#",
+	"#.#.....:.....#..#",
+	"#.......:........#",
+	"#####...:...######",
+	"#ss.....:.....ss.#",
+	"#ss.#...:...#.ss.#",
+	"#.......:........#",
+	"#...#...:...#....#",
+	"#.......:........#",
+	"#.......:........#",
+	"#########:########",
+]
+## The burial chamber at the crypt's end (beyond the second mini boss): the boss and its reward.
+const CRYPT_END := [
+	"##############",
+	"####......####",
+	"###........###",
+	"###........###",
+	"####......####",
+	"#####....#####",
+	"######..######",
+	"######::######",
+]
+const F_CRYPT_MINI_1 := "postgame.crypt_mini_boss_1"
+const F_CRYPT_MINI_2 := "postgame.crypt_mini_boss_2"
+const CRYPT_MINI_UNITS: Array[String] = ["monster", "necromancer"]
+const LV_CRYPT_MINI: Array[int] = [39, 41]
+
+
+func _build_crypt() -> void:
+	var zone := _wild_zone(["ash_field"], [["monster", 2.0], ["blightcap", 1.0]])
+	var hall: Array = []
+	for lc in [Vector2i(5, 15), Vector2i(13, 15), Vector2i(2, 3), Vector2i(14, 3)]:
+		var lamp := _prop("crypt_lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(0.6, 0.86, 0.7), true)
+		lamp.glow = 2.5
+		hall.append(lamp)
+	hall.append(_mini_boss("crypt_warden_1", Vector2i(9, 2), CRYPT_MINI_UNITS[0], LV_CRYPT_MINI[0], F_CRYPT_MINI_1,
+		"Something huge stirs in the doorway, barring the way deeper. Fight?"))  # TODO(story)
+	hall.append(_warp("stairs_up", Rect2i(9, 17, 1, 1), &"crownhaven_graveyard", &"tomb"))
+	hall.append(_warp("north_exit", Rect2i(9, 0, 1, 1), &"old_crypt_depths", &"south"))
+	_dungeon_floor("old_crypt", "The Old Crypt", "old_crypt", CRYPT_HALL, CR_TILES, "basalt_column", "Night", "Default",
+		POSTGAME_BAND, {"stairs": [Vector2i(9, 16), "north"], "north": [Vector2i(9, 1), "south"]}, hall, [zone])
+	var deep: Array = []
+	for lc in [Vector2i(5, 2), Vector2i(11, 2)]:
+		var lamp := _prop("crypt_lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(0.6, 0.86, 0.7), true)
+		lamp.glow = 3.0
+		deep.append(lamp)
+	deep.append(_mini_boss("crypt_warden_2", Vector2i(8, 2), CRYPT_MINI_UNITS[1], LV_CRYPT_MINI[1], F_CRYPT_MINI_2,
+		"A cold shape rises in the last doorway. It will not let you pass. Fight?"))  # TODO(story)
+	deep.append(_warp("south_exit", Rect2i(9, 17, 1, 1), &"old_crypt", &"north"))
+	deep.append(_warp("north_exit", Rect2i(8, 0, 1, 1), &"old_crypt_end", &"south"))
+	_dungeon_floor("old_crypt_depths", "The Old Crypt", "old_crypt", CRYPT_DEPTHS, CR_TILES, "basalt_column", "Night",
+		"Default", POSTGAME_BAND, {"south": [Vector2i(9, 16), "north"], "north": [Vector2i(8, 1), "south"]}, deep, [zone])
+	# The burial chamber: the boss, and the reward once it falls.
+	var end: Array = []
+	for lc in [Vector2i(4, 1), Vector2i(9, 1)]:
+		var lamp := _prop("crypt_lamp_%d_%d" % [lc.x, lc.y], "lamp", lc, Vector2i.ONE, Color(0.6, 0.86, 0.7), true)
+		lamp.glow = 3.0
+		end.append(lamp)
+	end.append(_crypt_boss(Vector2i(6, 1)))
+	var chest := _chest("crypt_chest", Vector2i(8, 2), "south", [&"dawnpetal_draught", &"dawnpetal_draught", &"bitterroot_salve"], 600)
+	chest.visible_if = "has(\"%s\")" % F_CRYPT_BOSS_BEATEN
+	end.append(chest)
+	end.append(_warp("south_exit", Rect2i(6, 7, 2, 1), &"old_crypt_depths", &"north"))
+	_dungeon_floor("old_crypt_end", "The Old Crypt", "old_crypt", CRYPT_END, CR_TILES, "basalt_column", "Night",
+		"Default", POSTGAME_BAND, {"south": [Vector2i(6, 6), "north"]}, end)
+
+
+func _crypt_boss(c: Vector2i) -> NpcEntity:
+	var e := NpcEntity.new()
+	e.id = &"crypt_boss"
+	e.cell = Vector3i(c.x, c.y, 0)
+	e.facing = "south"
+	e.display_name = _species_name(StringName(CRYPT_BOSS_UNIT))
+	e.speaker_name = e.display_name
+	e.visual_character = StringName(CRYPT_BOSS_UNIT)
+	e.visible_if = "not has(\"%s\")" % F_CRYPT_BOSS_BEATEN
+	var fight := StartBattleCommand.new()
+	fight.spec = _crypt_spec()
+	fight.source = BattleRequest.SOURCE_SCRIPT
+	var face := ChoiceCommand.new()
+	face.prompt = _narr("Cold light gathers in the dark at the end of the crypt -- and something rises to meet you. Fight?")  # TODO(story)
+	face.options = StoryCommand.list([
+		ChoiceOption.make("Fight", [fight, IfCommand.make("outcome() == \"victory\"", [
+			_say([_narr("The light gutters out, and the crypt falls silent.")]),  # TODO(story)
+			SaveGameCommand.new(),
+		])]),
+		ChoiceOption.make("Not yet", [], true),
+	])
+	e.on_interact = StoryCommand.list([face])
+	return e
+
+
+# --- THE HIDDEN DEPTHS (#106): epic ruins in a cave; the boss that begins the post-game ----------
+#
+# Four areas, one way through, south to north: the cave, two halls of ruins, and the heart where the
+# boss sleeps. 'm' moss where strong wild creatures roam; ':' the old road through the ruins. Its way
+# in from Mountain Base is not built yet (the south exit answers until it is). Beating the boss
+# AWAKENS it -- the post-game begins (#98: F_POSTGAME).
+
+const HD_TILES := {"#": "basalt_column", ".": "forest_dirt", ":": "flagstones", "m": "tall_grass"}
+const HDN_CAVE := [
+	"##########::########",
+	"#########.:.########",
+	"########..:..#######",
+	"###mm....::....#####",
+	"##mmm...::.....mm###",
+	"##mm...::......mmm##",
+	"###...::...##...mm##",
+	"####..:...####...###",
+	"###...::...##....###",
+	"##mm...::......mm###",
+	"##mmm...::....mmm###",
+	"###mm....::....m####",
+	"#####.....::...#####",
+	"#######....::..#####",
+	"#########..::#######",
+	"##########::########",
+]
+const HDN_RUINS_1 := [
+	"##########:###########",
+	"#####...#.:.#...######",
+	"####.mm...:...mm.#####",
+	"###..mm.#.:.#.mm..####",
+	"##..#...#.:.#...#..###",
+	"##......#.:.#......###",
+	"##mm#.........#.mm.###",
+	"##mm.....:::......####",
+	"###.#...#.:.#...#..###",
+	"###.....#.:.#.....####",
+	"####.mm...:...mm.#####",
+	"#####mm.#.:.#.mm.#####",
+	"######....:....#######",
+	"#######...:...########",
+	"########..:..#########",
+	"##########:###########",
+]
+const HDN_RUINS_2 := [
+	"###########:##########",
+	"#########...:..#######",
+	"#########.#:#.#.######",
+	"#######.........######",
+	"######mm#.#:#.#mm#####",
+	"#####.mm...:...mm.####",
+	"####.#.#.#.:.#.#.#.###",
+	"###mm......:......mm##",
+	"###mm#.#.#.:.#.#.#mm##",
+	"####.......:.......###",
+	"#####.#.#.#:#.#.#.####",
+	"######mm...:...mm#####",
+	"#######mm..:..mm######",
+	"########...:...#######",
+	"##########.:.#########",
+	"###########:##########",
+]
+const HDN_HEART := [
+	"##################",
+	"######......######",
+	"#####........#####",
+	"####..........####",
+	"###....::::....###",
+	"###...:::::....###",
+	"###....::::....###",
+	"####..........####",
+	"#####...::...#####",
+	"######..::..######",
+	"#######.::.#######",
+	"########::########",
+	"########::########",
+	"########::########",
+]
+const F_DEPTHS_BOSS_BEATEN := "hidden_depths.boss_beaten"
+const DEPTHS_BOSS_ID := "hidden_depths.boss"
+const DEPTHS_BOSS_MAP_PATH := CONTENT + "battles/ow_hidden_depths.tres"
+## PLACEHOLDER battle-ready units: the boss (the owner's to decide) and its guard.
+const DEPTHS_BOSS_UNIT := "monster"
+const DEPTHS_GUARD_UNITS: Array[String] = ["gem_knight", "gem_knight"]
+## FIXED above the Northern Mountains band (25-35), the main game's last stretch (KNOB).
+const LV_DEPTHS_BOSS := 38
+const LV_DEPTHS_GUARDS := 35
+
+
+func _hdn_ruin_props(prefix: String, rows: Array) -> Array:
+	var out: Array = []
+	# Glowing crystals along the old road, rubble in the side halls (PLACEHOLDER looks).
+	var road: Array[Vector2i] = _ascii_cells(rows, ":")
+	for i in range(0, road.size(), 4):
+		var c: Vector2i = road[i] + Vector2i(1, 0)
+		if String(rows[c.y])[c.x] == ".":
+			var cr := _prop("%s_crystal_%d_%d" % [prefix, c.x, c.y], "crystal", c, Vector2i.ONE, Color(0.55, 0.9, 1.0), true)
+			cr.glow = 3.0
+			out.append(cr)
+	return out
+
+
+func _build_hidden_depths() -> void:
+	var zone := _wild_zone(["tall_grass"], [["gem_knight", 2.0], ["monster", 1.5]])
+	var band: Vector2i = REGION_BANDS["northern_mountains"]
+	# The cave. Its way back down to Mountain Base: not built yet.
+	var cave: Array = _hdn_ruin_props("hd0", HDN_CAVE)
+	cave.append(_closed_road("south_exit", Rect2i(10, 15, 2, 1), "mountain_base", &"hidden_depths", &"south",
+		"The path back down toward Mountain Base is buried under a fresh rockfall. Not that way -- not yet."))  # TODO(story)
+	cave.append(_warp("north_exit", Rect2i(10, 0, 2, 1), &"hidden_depths_2", &"south"))
+	_dungeon_floor("hidden_depths", "Hidden Depths", "hidden_depths", HDN_CAVE, HD_TILES, "basalt_column", "Dusk",
+		"Default", band, {"south": [Vector2i(10, 14), "north"], "north": [Vector2i(10, 1), "south"]}, cave, [zone])
+	var r1: Array = _hdn_ruin_props("hd1", HDN_RUINS_1)
+	r1.append(_warp("south_exit", Rect2i(10, 15, 1, 1), &"hidden_depths", &"north"))
+	r1.append(_warp("north_exit", Rect2i(10, 0, 1, 1), &"hidden_depths_3", &"south"))
+	_dungeon_floor("hidden_depths_2", "Hidden Depths", "hidden_depths", HDN_RUINS_1, HD_TILES, "basalt_column", "Dusk",
+		"Default", band, {"south": [Vector2i(10, 14), "north"], "north": [Vector2i(10, 1), "south"]}, r1, [zone])
+	var r2: Array = _hdn_ruin_props("hd2", HDN_RUINS_2)
+	r2.append(_warp("south_exit", Rect2i(11, 15, 1, 1), &"hidden_depths_2", &"north"))
+	r2.append(_warp("north_exit", Rect2i(11, 0, 1, 1), &"hidden_depths_heart", &"south"))
+	_dungeon_floor("hidden_depths_3", "Hidden Depths", "hidden_depths", HDN_RUINS_2, HD_TILES, "basalt_column", "Dusk",
+		"Default", band, {"south": [Vector2i(11, 14), "north"], "north": [Vector2i(11, 1), "south"]}, r2, [zone])
+	var heart: Array = _hdn_ruin_props("hd3", HDN_HEART)
+	heart.append(_depths_boss(Vector2i(8, 2)))
+	heart.append(_warp("south_exit", Rect2i(8, 13, 2, 1), &"hidden_depths_3", &"north"))
+	_dungeon_floor("hidden_depths_heart", "Heart of the Depths", "hidden_depths", HDN_HEART, HD_TILES, "basalt_column",
+		"Dusk", "Default", band, {"south": [Vector2i(8, 12), "north"]}, heart)
+
+
+## THE HIDDEN DEPTHS' BOSS (#98 / #106): TACTICAL, FIXED; beating it AWAKENS it -- the post-game begins
+## (F_POSTGAME). Try Again on a loss. TODO(story): who it is, and what its awakening means.
+func _depths_boss_spec() -> BattleSpec:
+	var spec := BattleSpec.new()
+	spec.kind = BattleSpec.Kind.TACTICAL
+	spec.encounter_id = DEPTHS_BOSS_ID
+	spec.map_path = DEPTHS_BOSS_MAP_PATH
+	spec.squad_size = POSTGAME_SQUAD_SIZE
+	spec.ai_difficulty = 1
+	spec.opponent_name = _species_name(StringName(DEPTHS_BOSS_UNIT))
+	var team: Array[Dictionary] = [{"character_id": DEPTHS_BOSS_UNIT, "strength": 1.0}]
+	for u in DEPTHS_GUARD_UNITS:
+		team.append({"character_id": u, "strength": 1.0})
+	spec.opponent_team = team
+	spec.enemy_level = LV_DEPTHS_BOSS
+	spec.boss_battle = true
+	var flags: Array[String] = [F_DEPTHS_BOSS_BEATEN, F_POSTGAME]
+	spec.reward_flags = flags
+	spec.defeat_policy = BattleSpec.DefeatPolicy.RETRY
+	spec.clash_intro = true
+	return spec
+
+
+func _depths_boss(c: Vector2i) -> NpcEntity:
+	var e := NpcEntity.new()
+	e.id = &"depths_boss"
+	e.cell = Vector3i(c.x, c.y, 0)
+	e.facing = "south"
+	e.display_name = _species_name(StringName(DEPTHS_BOSS_UNIT))
+	e.speaker_name = e.display_name
+	e.visual_character = StringName(DEPTHS_BOSS_UNIT)
+	e.visible_if = "not has(\"%s\")" % F_DEPTHS_BOSS_BEATEN
+	var fight := StartBattleCommand.new()
+	fight.spec = _depths_boss_spec()
+	fight.source = BattleRequest.SOURCE_SCRIPT
+	var face := ChoiceCommand.new()
+	face.prompt = _narr("Something vast sleeps at the heart of the ruins. As you come near, it stirs. Face it?")  # TODO(story)
+	face.options = StoryCommand.list([
+		ChoiceOption.make("Face it", [fight, IfCommand.make("outcome() == \"victory\"", [
+			_say([_narr("The depths shudder. Far away, the ground answers.")]),  # TODO(story)
+			SaveGameCommand.new(),
+		])]),
+		ChoiceOption.make("Not yet", [], true),
+	])
+	e.on_interact = StoryCommand.list([face])
+	return e
+
+
+func _build_depths_boss_map() -> void:
+	var m := _new_map("The Heart of the Depths", 12, 10, "The ruined hall at the heart of the Hidden Depths.")
+	m.lighting_preset = "Dusk"
+	var pillars := [Vector2i(2, 2), Vector2i(9, 2), Vector2i(2, 6), Vector2i(9, 6), Vector2i(0, 0), Vector2i(11, 0)]
+	_paint(m, func(x: int, y: int) -> String:
+		var c := Vector2i(x, y)
+		if c in pillars:
+			return "basalt_column"
+		if x >= 5 and x <= 6:
+			return "flagstones"
+		return "forest_dirt")
+	m.unit_spawns.clear()
+	for c in [Vector2i(4, 8), Vector2i(6, 8), Vector2i(8, 8), Vector2i(5, 9)]:
+		m.set_character_spawn_at_position(c, 0, String(STARTER_ID))
+	m.set_character_spawn_at_position(Vector2i(5, 1), 1, DEPTHS_BOSS_UNIT, "BOSS")
+	var gc := [Vector2i(3, 3), Vector2i(8, 3)]
+	for i in range(DEPTHS_GUARD_UNITS.size()):
+		m.set_character_spawn_at_position(gc[i], 1, DEPTHS_GUARD_UNITS[i])
+		m.unit_spawns[m.unit_spawns.size() - 1]["level"] = LV_DEPTHS_GUARDS
+	var vc: Array[String] = ["Eliminate All Enemies"]
+	m.victory_conditions = vc
+	_save(m, DEPTHS_BOSS_MAP_PATH)
+
+
+# --- THE SEA DUNGEON: the Island of Tides (#44 / #103) ------------------------------------------
+#
+# A WHIRLPOOL off Stormreef Isle carries the hero (riding the sea move) to the Island of Tides. (#44:
+# "when it is RAINING and at NIGHT, going into a WHIRLPOOL brings the hero to the island" -- the in-game
+# clock and rain are not built: TIDES_WHIRLPOOL_IF is the knob.) In its cave the way DOWN is through
+# WHIRLPOOLS in small lakes ('W', ridden) and HOLES in the floor ('d'); some holes lead back UP ('u',
+# and cave 3's 'd') -- backtracking. At the bottom, the legend (a tactical battle).
+# '.' cave floor, 's' sea grass (wild creatures), '~' water, '#' rock, 'O' the cave mouth.
+
+const TIDES_TILES := {"#": "basalt_column", ".": "sand", "s": "tall_grass", "~": "deep_water", "W": "deep_water",
+	"O": "sand", "d": "sand", "u": "sand"}
+## KNOB (#44): when the whirlpool off Stormreef Isle carries you to the island. Blank = always, until the
+## in-game clock (night) and rain exist -- then e.g. "is_night() and weather('rain')".
+const TIDES_WHIRLPOOL_IF := ""
+const TIDES_ISLAND := [
+	"~~~~~~~~~~~~~~~~~~",
+	"~~~~~~#######~~~~~",
+	"~~~~~##O....##~~~~",
+	"~~~~##.......##~~~",
+	"~~~##sssssssss#~~~",
+	"~~~#sssssssssss~~~",
+	"~~~ssssssssssss~~~",
+	"~~~~ssssssssss~~~~",
+	"~~~~~ssssssss~~~~~",
+	"~~~~~~ssssss~~~~~~",
+	"~~~~~~~~~~~~~~~~~~",
+	"~~~~~~~~~~~~~~~~~~",
+	"~~~~~~~~~~~~~~~~~~",
+	"~~~~~~~~~~~~~~~~~~",
+]
+const TIDES_CAVE_1 := [
+	"####################",
+	"#ss..##~~~~##..ss..#",
+	"#ss..#~~~~~~#..ss..#",
+	"#....#~~W~~~#......#",
+	"#....##~~~~##..##..#",
+	"#..............##..#",
+	"###...........######",
+	"#d#...##..##.......#",
+	"#.#...#....#....ss.#",
+	"#.....#....#....ss.#",
+	"#.....##..##.......#",
+	"#..ss..........##..#",
+	"#..ss...........#..#",
+	"#######......#######",
+	"#########..#########",
+	"#########..#########",
+]
+const TIDES_CAVE_2 := [
+	"####################",
+	"####......~~~~~....#",
+	"####.ss..~~~~~~~...#",
+	"####.ss.~~~W~~~~~..#",
+	"####.....~~~~~~....#",
+	"####......~~~~.....#",
+	"#....##..........###",
+	"#.ss.##...ss.....#d#",
+	"#.ss......ss.....#.#",
+	"#.....##.........#.#",
+	"#...~~~~~.....##...#",
+	"#..~~~~~~~....##...#",
+	"#..~~~~~~~.........#",
+	"#...~~~~~.....ss...#",
+	"#..............s...#",
+	"####################",
+]
+const TIDES_CAVE_3 := [
+	"####################",
+	"#..ss.....##.....ss#",
+	"#..ss.~~~~##~~~..ss#",
+	"#....~~~~~~~~~~~...#",
+	"#...~~~~~~~~~~~~~..#",
+	"#...~~~~W~~~~~~~~..#",
+	"#....~~~~~~~~~~~...#",
+	"#.....~~~~##~~~....#",
+	"###.......##.....###",
+	"#d#..ss........ss..#",
+	"#.#..ss..##....ss..#",
+	"#........##........#",
+	"#....##.......##...#",
+	"#....##.......##.u.#",
+	"#..................#",
+	"####################",
+]
+## Where cave 1's west hole drops you: a sealed hollow whose only way out is back UP (a backtrack).
+const TIDES_POCKET := [
+	"############",
+	"#u....ss...#",
+	"#.....ss...#",
+	"#..........#",
+	"#....##....#",
+	"#..........#",
+	"############",
+]
+const TIDES_DEPTHS := [
+	"##################",
+	"######......######",
+	"#####........#####",
+	"####..~~~~~~..####",
+	"###..~~~~~~~~..###",
+	"###..~~~~~~~~..###",
+	"####..~~~~~~..####",
+	"#####........#####",
+	"######......######",
+	"#######....#######",
+	"########..########",
+	"##################",
+]
+const F_TIDES_BEATEN := "tides.legend_beaten"
+const F_TIDES_BONDED := "legend.tides.bonded"
+const TIDES_BATTLE_ID := "tides.legend"
+const TIDES_MAP_PATH := CONTENT + "battles/ow_tides_depths.tres"
+## The legend's two screens on its board (inside the open-ocean band).
+const LV_TIDES_SCREEN := 19
+## PLACEHOLDER legend unit (a distinct battle-ready stand-in until the sea legend is designed).
+const TIDES_LEGEND_UNIT := "vineweave"
+const TIDES_UP_TOAST := "The hole leads back up -- you climb out where you started."  # TODO(story)
+const TIDES_DOWN_TOAST := "The whirlpool drags you down into the dark..."  # TODO(story)
+
+
+func _whirlpool(id: String, c: Vector2i, target: String, entry: String, toast: String, visible_if: String = "") -> Array:
+	var w := _warp(id, Rect2i(c.x, c.y, 1, 1), StringName(target), StringName(entry), visible_if)
+	w.arrival_toast = toast
+	return [_prop(id + "_swirl", "whirlpool", c, Vector2i.ONE, Color(0.7, 0.9, 1.0), false, visible_if), w]
+
+
+func _build_island_of_tides() -> void:
+	var band: Vector2i = REGION_BANDS["open_ocean"]
+	var sea := _wild_zone(["tall_grass"], [["mycothrall", 2.0], ["blightcap", 1.5], ["vineweave", 1.0]])
+	# The island: arrive riding by the whirlpool, the cave mouth in the north, the sea back to Stormreef.
+	var isl: Array = []
+	isl.append(_warp("cave_mouth", Rect2i(7, 2, 1, 1), &"tides_cave_1", &"south"))
+	# Back out on the open sea: the calm water, or (in the post-game) the water with the volcano in it.
+	isl.append(_warp("back_to_sea", Rect2i(0, 13, 18, 1), &"stormreef_waters", &"east", "not (%s)" % POSTGAME))
+	isl.append(_warp("back_to_sea_erupted", Rect2i(0, 13, 18, 1), &"stormreef_waters_erupted", &"east", POSTGAME))
+	_dungeon_floor("island_of_tides", "Island of Tides", "island_of_tides", TIDES_ISLAND, TIDES_TILES, "deep_water",
+		"Dusk", "Default", band, {"whirlpool": [Vector2i(9, 11), "north"], "cave": [Vector2i(8, 3), "south"]}, isl, [sea])
+	# Cave 1: the whirlpool in the lake goes down; the hole in the west goes down into a pocket whose only
+	# way out is back up (a backtrack).
+	var c1: Array = []
+	c1.append(_warp("south_exit", Rect2i(9, 15, 2, 1), &"island_of_tides", &"cave"))
+	c1.append_array(_whirlpool("whirl_down", Vector2i(8, 3), "tides_cave_2", "whirl", TIDES_DOWN_TOAST))
+	c1.append_array(_hole("hole_down", Vector2i(1, 7), "tides_pocket", "drop"))
+	_dungeon_floor("tides_cave_1", "Cave of Tides", "island_of_tides", TIDES_CAVE_1, TIDES_TILES, "basalt_column",
+		"Dusk", "Default", band, {"south": [Vector2i(9, 14), "north"], "back_up": [Vector2i(1, 9), "east"]}, c1, [sea])
+	# The hollow under cave 1's west hole: its only way out is back up.
+	var pocket: Array = []
+	pocket.append_array(_hole("hole_up", Vector2i(1, 1), "tides_cave_1", "back_up", TIDES_UP_TOAST))
+	_dungeon_floor("tides_pocket", "Cave of Tides", "island_of_tides", TIDES_POCKET, TIDES_TILES, "basalt_column",
+		"Dusk", "Default", band, {"drop": [Vector2i(3, 3), "north"]}, pocket, [sea])
+	# Cave 2: the lake's whirlpool and the east hole both go down.
+	var c2: Array = []
+	c2.append_array(_whirlpool("whirl_down", Vector2i(11, 3), "tides_cave_3", "whirl", TIDES_DOWN_TOAST))
+	c2.append_array(_hole("hole_down", Vector2i(18, 7), "tides_cave_3", "east"))
+	_dungeon_floor("tides_cave_2", "Cave of Tides", "island_of_tides", TIDES_CAVE_2, TIDES_TILES, "basalt_column",
+		"Dusk", "Default", band, {"whirl": [Vector2i(12, 3), "south"],
+			"back_up": [Vector2i(18, 9), "south"]}, c2, [sea])
+	# Cave 3: the lake's whirlpool goes down to the depths; the holes lead back UP (east to cave 2, west
+	# all the way to cave 1).
+	var c3: Array = []
+	c3.append_array(_whirlpool("whirl_down", Vector2i(8, 5), "tides_depths", "whirl", TIDES_DOWN_TOAST))
+	c3.append_array(_hole("hole_up_east", Vector2i(17, 13), "tides_cave_2", "back_up", TIDES_UP_TOAST))
+	c3.append_array(_hole("hole_up_west", Vector2i(1, 9), "tides_cave_1", "south", TIDES_UP_TOAST))
+	_dungeon_floor("tides_cave_3", "Cave of Tides", "island_of_tides", TIDES_CAVE_3, TIDES_TILES, "basalt_column",
+		"Dusk", "Default", band, {"whirl": [Vector2i(9, 5), "south"], "east": [Vector2i(16, 12), "north"]}, c3, [sea])
+	# The depths: the legend over its lake; a hole back up to cave 3.
+	var dp: Array = []
+	dp.append_array(_hole("hole_up", Vector2i(9, 9), "tides_cave_3", "east", TIDES_UP_TOAST))
+	dp.append(_postgame_legend("tides_legend", Vector2i(8, 1), TIDES_LEGEND_UNIT,
+		_tides_spec(), F_TIDES_BEATEN, F_TIDES_BONDED,
+		"The water of the deep lake rises and turns, and something old rises with it. Face it?"))  # TODO(story)
+	_dungeon_floor("tides_depths", "Depths of the Tides", "island_of_tides", TIDES_DEPTHS, TIDES_TILES, "basalt_column",
+		"Night", "Default", band, {"whirl": [Vector2i(8, 10), "north"]}, dp)
+
+
+## THE ISLAND OF TIDES' LEGEND (#44 / #74): TACTICAL, FIXED above the open-ocean band (#81).
+func _tides_spec() -> BattleSpec:
+	var spec := _postgame_legend_spec(TIDES_BATTLE_ID, TIDES_MAP_PATH, TIDES_LEGEND_UNIT, F_TIDES_BEATEN)
+	BattleSpec.make_legend(spec, REGION_BANDS["open_ocean"])
+	return spec
+
+
+func _build_tides_map() -> void:
+	_postgame_legend_map(TIDES_MAP_PATH, "The Depths of the Tides",
+		"The cave lake at the bottom of the Island of Tides.", "Night", "Default",
+		TIDES_LEGEND_UNIT, "mycothrall", LV_TIDES_SCREEN, func(x: int, y: int) -> String:
+			var c := Vector2i(x, y)
+			if c in [Vector2i(0, 0), Vector2i(11, 0), Vector2i(0, 9), Vector2i(11, 9)]:
+				return "basalt_column"
+			if (x <= 1 or x >= 10) and y >= 3 and y <= 6:
+				return "deep_water"
+			return "sand")

@@ -20,10 +20,27 @@ extends OverworldEntity
 ## "" = the default ([member StoryRuleset.npc_default_model]), "female" = the female default
 ## ([member StoryRuleset.npc_female_model]). Set only where the story establishes it.
 @export var body: String = ""
+## ASLEEP while this condition holds (blank = never): a drifting "z Z" over the head, and the NPC
+## does not turn to face you when spoken to (its bank line says what a sleeper says). E.g.
+## Frostpeak's whole town, until the hero sets the dream right (DECISIONS.md #95).
+@export var asleep_if: String = ""
+## How it sleeps: "stand" (dozing on its feet) or "lie" (flat on a bed: the actor's cell is the
+## bed's SOUTH cell, the head lies in the cell north of it).
+@export_enum("stand", "lie") var sleep_pose: String = "stand"
 
 
 func kind() -> StringName:
 	return &"npc"
+
+
+func is_asleep(state: StoryState) -> bool:
+	return not asleep_if.strip_edges().is_empty() and ConditionContext.evaluate(asleep_if, state)
+
+
+func validate(area: Resource, issues: Array[String]) -> void:
+	super.validate(area, issues)
+	StoryCommand.check_condition(asleep_if, issues, "%s/%s asleep_if" % [
+		String(area.get("area_id")) if area != null else "?", String(id)])
 
 
 func is_interactable() -> bool:

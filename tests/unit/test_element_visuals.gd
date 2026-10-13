@@ -15,7 +15,7 @@ extends GutTest
 func test_the_badge_colour_is_the_same_one_the_move_stripes_use() -> void:
 	# The whole point of routing through ConquestTheme: a unit's element badge and its
 	# moves' element stripes cannot be different hues, because there is only one function.
-	for element in ["nature", "fire", "frost", "arcane", "holy", "steel"]:
+	for element in ["plant", "fire", "frost", "arcane", "radiant", "steel"]:
 		assert_eq(ElementVisuals.color_for(element), ConquestTheme.element_color(element),
 				"'%s' badges in the same colour the move rows stripe with" % element)
 
@@ -29,11 +29,11 @@ func test_every_chart_element_has_its_own_hue() -> void:
 	# The chart treats dark/wind/earth as distinct types, so their badges must be
 	# distinguishable: dark once fell through to the amber fallback (indistinguishable
 	# from UNELEMENTED) and wind/earth both collapsed onto nature green.
-	assert_ne(ElementVisuals.color_for(&"dark"), ConquestTheme.AMBER,
+	assert_ne(ElementVisuals.color_for(&"grim"), ConquestTheme.AMBER,
 			"a dark unit's badge is not the unelemented fallback")
-	assert_ne(ElementVisuals.color_for(&"wind"), ElementVisuals.color_for(&"nature"),
+	assert_ne(ElementVisuals.color_for(&"wind"), ElementVisuals.color_for(&"plant"),
 			"wind is not nature green")
-	assert_ne(ElementVisuals.color_for(&"earth"), ElementVisuals.color_for(&"nature"),
+	assert_ne(ElementVisuals.color_for(&"earth"), ElementVisuals.color_for(&"plant"),
 			"earth is not nature green")
 	assert_ne(ElementVisuals.color_for(&"wind"), ElementVisuals.color_for(&"earth"),
 			"wind and earth are distinct from each other too")
@@ -42,7 +42,7 @@ func test_every_chart_element_has_its_own_hue() -> void:
 # --- The badge's text ----------------------------------------------------------
 
 func test_an_element_reads_as_its_capitalised_name() -> void:
-	assert_eq(ElementVisuals.label_for(&"nature"), "Nature", "the badge names the element")
+	assert_eq(ElementVisuals.label_for(&"plant"), "Plant", "the badge names the element")
 	assert_eq(ElementVisuals.label_for(&"deep_water"), "Deep Water",
 			"and a multi-word authored id is humanised rather than printed raw")
 
@@ -83,8 +83,8 @@ func test_a_units_element_is_read_through_the_accessor_gameplay_uses() -> void:
 
 func test_a_moves_element_is_read_the_same_way() -> void:
 	var move := MoveResource.new()
-	move.element = &"holy"
-	assert_eq(ElementVisuals.of_move(move), &"holy", "the move's authored element")
+	move.element = &"radiant"
+	assert_eq(ElementVisuals.of_move(move), &"radiant", "the move's authored element")
 	assert_eq(ElementVisuals.of_move(null), &"", "null is neutral, never an error")
 
 
@@ -203,15 +203,15 @@ func test_the_ability_colour_follows_who_the_bonus_helps() -> void:
 # --- The badge WIDGET (built, not yet rendered) --------------------------------------
 
 func test_a_badge_for_an_element_carries_its_name_and_its_colour() -> void:
-	var badge: PanelContainer = autofree(ElementVisuals.make_badge(&"nature"))
+	var badge: PanelContainer = autofree(ElementVisuals.make_badge(&"plant"))
 	assert_true(badge.visible, "an elemented unit gets a visible badge")
 	var label := badge.get_node(ElementVisuals.BADGE_LABEL_NAME) as Label
-	assert_eq(label.text, "Nature", "naming the element")
+	assert_eq(label.text, "Plant", "naming the element")
 	# The badge is a notched grove plate (OrnateStyleBox), which keeps border_color.
 	var box := badge.get_theme_stylebox("panel") as OrnateStyleBox
 	assert_not_null(box, "and painted with its own stylebox")
 	if box != null:
-		assert_eq(box.border_color, ConquestTheme.element_color("nature"),
+		assert_eq(box.border_color, ConquestTheme.element_color("plant"),
 				"framed in the shared element colour")
 
 
@@ -228,7 +228,7 @@ func test_re_pointing_a_badge_swaps_the_element_without_rebuilding_it() -> void:
 	assert_eq(label.text, "Frost", "the badge follows the newly shown unit")
 	ElementVisuals.update_badge(badge, &"")
 	assert_false(badge.visible, "and disappears for a unit with no element")
-	ElementVisuals.update_badge(badge, &"holy")
+	ElementVisuals.update_badge(badge, &"radiant")
 	assert_true(badge.visible, "then comes back for one that has")
 
 
@@ -236,7 +236,7 @@ func test_the_badge_label_states_a_real_minimum_width() -> void:
 	# The trap this exists for: the label is clipped (so a long id trims instead of
 	# widening the row), a clipped Label reports a 1px minimum, and the badge is laid out
 	# at exactly its minimum inside an HBox. Without an explicit width it is a dot.
-	var badge: PanelContainer = autofree(ElementVisuals.make_badge(&"nature"))
+	var badge: PanelContainer = autofree(ElementVisuals.make_badge(&"plant"))
 	var label := badge.get_node(ElementVisuals.BADGE_LABEL_NAME) as Label
 	assert_true(label.custom_minimum_size.x > 1.0,
 			"the badge claims room for its text (%.1fpx) rather than collapsing to a dot"

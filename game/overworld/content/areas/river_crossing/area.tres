@@ -206,8 +206,8 @@ beats = Array[Resource]([SubResource("Resource_xdhhb")])
 [sub_resource type="Resource" id="Resource_hv65l"]
 script = ExtResource("5_wmbul")
 area_rect = Rect2i(23, 14, 1, 1)
-target_area = &"river_crossing"
-target_entry = &"east_road"
+target_area = &"beach_village"
+target_entry = &"west_road"
 requires = "has(\"world.beach_road_open\")"
 locked_scene = SubResource("Resource_83hwk")
 id = &"east_exit"
@@ -233,6 +233,15 @@ key = "river_crossing.arrived"
 script = ExtResource("9_y55b1")
 condition = "not has(\"river_crossing.arrived\")"
 then_commands = Array[Resource]([SubResource("Resource_kdarp")])
+
+[sub_resource type="Resource" id="Resource_lvt5j"]
+script = ExtResource("10_oj0ws")
+key = "world.beach_road_open"
+
+[sub_resource type="Resource" id="Resource_qot7i"]
+script = ExtResource("9_y55b1")
+condition = "(has(\"opening.complete\")) and not has(\"world.beach_road_open\")"
+then_commands = Array[Resource]([SubResource("Resource_lvt5j")])
 
 [resource]
 script = ExtResource("11_0fgpi")
@@ -264,5 +273,5 @@ entry_points = {
 }
 }
 entities = Array[Resource]([SubResource("Resource_g0l7k"), SubResource("Resource_474uf"), SubResource("Resource_b6dki"), SubResource("Resource_mtg3m"), SubResource("Resource_5m0st"), SubResource("Resource_65pmo"), SubResource("Resource_xeg3g"), SubResource("Resource_o4rin"), SubResource("Resource_0d5hf"), SubResource("Resource_u5mpc"), SubResource("Resource_om6bn"), SubResource("Resource_o4bd6"), SubResource("Resource_u4wfy"), SubResource("Resource_5307s"), SubResource("Resource_wm3sh"), SubResource("Resource_5ttts"), SubResource("Resource_e7e26"), SubResource("Resource_unfpc"), SubResource("Resource_4ffgr"), SubResource("Resource_gypw4"), SubResource("Resource_86bip"), SubResource("Resource_hv65l"), SubResource("Resource_owh4t")])
-on_enter = Array[Resource]([SubResource("Resource_n45xl")])
+on_enter = Array[Resource]([SubResource("Resource_n45xl"), SubResource("Resource_qot7i")])
 level_band = Vector2i(2, 8)

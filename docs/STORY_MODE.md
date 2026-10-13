@@ -855,7 +855,10 @@ drawn from the procedural prop kit in `OverworldProps` (placeholders until the B
 **Built route:** Oakvale → (east) the Mossway → River Crossing → (north over the Old Bridge)
 Crownhaven's south gate → (west gate, after the opening) the Sparse Forest → Woodland Town →
 (west road, once Warden Hale opens it) Deepwood Village → (north trail, once Nyra is beaten) the
-Depths of the Wood (a maze) → the Heart of the Wood. See "The Deep Woods" below.
+Depths of the Wood (a maze) → the Heart of the Wood. See "The Deep Woods" below. After the opening the
+regions beyond open too: Crownhaven's harbour gate / River Crossing's coast road → Beach Village; Woodland
+Town's north trail → Frostpeak Village; Crownhaven's east gate → the Rocky Badlands → Redrock Village → the
+Red Desert. See "Beyond the Heartlands" below.
 
 | Area | Character | Layout |
 |---|---|---|
@@ -867,8 +870,14 @@ Depths of the Wood (a maze) → the Heart of the Wood. See "The Deep Woods" belo
 | The Sparse Forest 28x12 (route) | open woodland | a winding cart track, four thickets of wild grass (its own table: Petalfang, Blightcap, Mycothrall, Barkling), Woodsman Alder's clearing |
 | Woodland Town 28x24 | rustic timber town in a forest clearing, dawn light | stream with a plank bridge; east bank: Wardens' Lodge, boardwalk square + Wayshrine, Stumped Hart inn, Timber Row (trading post `woodland_trader`, forge), lumber yard + sawmill, camp; west bank: herbalist, archery range, the Starfall Stone glade; roads: east (the Sparse Forest), west (Deepwood Village -- held by the Wardens' rope until Warden Hale is asked), the north trail (Frostpeak Village, closed), the unmarked south trail (closed -- the Thieves Guild is never named in town) |
 | Deepwood Village 26x20 | clan village in a clearing of the old forest | Nyra's lodge + three tree-houses (PLACEHOLDER cabins), the Deepwood Wayshrine, Nyra, Lyra (while she is in Deepwood), three generic villagers; east: the road to Woodland Town; north: the trail into the Depths (shut until Nyra is beaten) |
-| Depths of the Wood: 4 rooms, 19x17 each (route) | old forest at dusk, every room alike | a MAZE (Lost Woods meets a Pokemon forest), each room enclosed by thick forest walls: a small clearing, 1-wide corridors to four exits and side passages; LIT lanterns mark the right exit (dark ones at the wrong exits, which lead back to the entrance); BREAKABLE TREES block the right way in rooms 2 and 4 (and a nook in room 3); tall grass (Petalfang, Blightcap, Barkling, Vineweave, Oakheart in the 8-15 band), two optional trainers, two chests |
+| Depths of the Wood: 4 rooms, 19x17 each (route) | old forest at dusk, every room alike | a MAZE (Lost Woods meets a Pokemon forest), each room enclosed by thick forest walls: a small clearing, 1-wide corridors to four exits and side passages; GREAT TREES and ROOTS mark the right exit (#101; the wrong exits lead into the Tangled Thicket, then back to the entrance); BREAKABLE TREES block the right way in rooms 2 and 4 (and a nook in room 3); tall grass (Petalfang, Blightcap, Barkling, Vineweave, Oakheart in the 8-15 band), two optional trainers, two chests |
 | Heart of the Wood 19x14 (route) | the sacred glade at the maze's end | Eldroot waits in the clearing |
+| Beach Village 28x22 | harbour village on the sand | huts above a boardwalk promenade, two piers over the sea, Eloi's longhouse, the Wayshrine, Cael; an islet (chest) only the sea move reaches; the sea route south (closed) |
+| Frostpeak Village 24x20 (+ its dream) | snowbound village under the peaks | the inn and a house (enterable: beds), Saevi's lodge, the Wayshrine, a frozen pond; everyone asleep until the dream is set right. `frostpeak_dream`: the same streets in the Dream light |
+| Rocky Badlands 32x14 (route) | the Redrock road through red mesas | scrub with wild creatures, a Prospector (duel) |
+| Redrock Village 26x20 | adobe village among the mesas | elder's hall, market tent, well, the Wayshrine; the rumours |
+| The Red Desert 28x18 (route) | sand and red rock under the eastern cliffs | the hooded figure, scrub, the cave mouth |
+| Desert Cave 14x16 / Secret Hideout / Hideout Depths 16x14 | a dead-end cave; a hideout dug into the rock | the sealed rock (password); five guards (duels); the commander and General Varden |
 
 ### The world registry (`content/world.tres`)
 
@@ -893,11 +902,12 @@ area's `world_map_pos` / `region_id` come from its place (`_place()` in the buil
 | Woodland Town (0.301, 0.384) | woodlands | built | Sparse Forest, Deepwood, Thieves Guild, Frostpeak |
 | Hidden Thieves Guild | woodlands | closed `world.thieves_guild_open`, **secret** | Woodland Town's south trail |
 | Deepwood Village (0.098, 0.474) / Depths of the Wood (0.114, 0.337) | woodlands | built (`deepwood_village` / `depths_of_the_wood`, `_2`, `_3`, `_4`, `_heart`); their roads open with `world.deepwood_open` (Warden Hale) / `world.depths_of_the_wood_open` (Nyra's win) | Woodland Town's west road / Deepwood's north trail |
-| Frostpeak Village | snowy_peaks | closed `world.frostpeak_open` | Woodland Town's north trail |
+| Frostpeak Village | snowy_peaks | built (`frostpeak_village`, `frostpeak_dream`, interiors); `world.frostpeak_open` (after the opening) | Woodland Town's north trail |
 | Mountain Base / Mountain Pass / Hidden Depths | northern_mountains | closed `world.mountain_road_open` / `world.mountain_pass_open` / `world.hidden_depths_open` | Crownhaven's north gate / Mountain Base |
 | Cindral (the Other Nation) | cindral | closed `world.cindral_open` | the Mountain Pass |
-| Redrock Village | rocky_badlands | closed `world.badlands_open` | Crownhaven's east gate |
-| Beach Village | sunlit_coast | closed `world.beach_road_open` | Crownhaven's harbour gate, River Crossing's coast road |
+| Rocky Badlands / Redrock Village / The Red Desert | rocky_badlands | built (`rocky_badlands`, `redrock_village`, `red_desert`, `badlands_cave`); `world.badlands_open` (after the opening) | Crownhaven's east gate |
+| Secret Hideout | rocky_badlands | built (`badlands_hideout`, `_depths`), **secret** until `badlands.hideout_open` | the Desert Cave |
+| Beach Village | sunlit_coast | built (`beach_village`); `world.beach_road_open` (after the opening) | Crownhaven's harbour gate, River Crossing's coast road |
 | Sunrise Isle / Island of Tides / Stormreef Isle | open_ocean | closed `world.sea_routes_open` | sea routes from Beach Village |
 
 Closed roads are `WarpEntity`s built by `_closed_road()`: `requires` is the place's open flag and a
@@ -942,15 +952,16 @@ Built by the builder's "THE DEEP WOODS" section (knobs are its constants). How t
    space is a small central clearing, four 1-wide corridors out to the exits, and each room's side
    passages cut into the walls (tall-grass pockets, dead ends). You always come in from the south;
    the three other exits are reachable only along their corridors: the RIGHT one leads on, the two
-   WRONG ones send you back to the maze's entrance (`WarpEntity.arrival_toast`: a short "You feel
-   turned around..." toast, nothing blocks); south goes back a room. **The clue:** every choice exit
-   has a pair of lantern posts at its mouth (`DM_LIGHT_PROP`, PLACEHOLDER look); at the right one they
-   are LIT (`PropEntity.glow` = `DM_LIGHT_GLOW`: an emissive lantern head and a light, in
-   `DM_LIGHT_TINT`), at the wrong ones they stay dark (`DM_DARK_TINT`, no glow), and fireflies drift
-   over the right corridor (`DM_CLUE_TILE`: sacred-meadow ground, the tile's own glow) -- the old
-   signpost at the entrance, the Deepwood hunter and Nyra all say "follow the lights". The way
-   through: room 1 **north**, room 2 **east**, room 3 **west**, room 4 **north**. In rooms 2 and 4 a
-   **gnarled tree** stands between the lit lanterns: face it, Confirm, "Use Treefell?" -- Yes fells it
+   WRONG ones lead into **the Tangled Thicket** (#101: "wrong path followed equals tough battles,
+   multiple enemy encounters"; `depths_of_the_wood_lost`: a look-alike room choked with grass, HIDDEN
+   rolls at `DM_LOST_RATE` even on its paths, the Deep Woods' strongest creatures at the top of the
+   band -- `DM_LOST_TABLE` / `DM_LOST_BAND`), every way out of which returns you to the maze's entrance
+   (short toasts: `DM_LOST_TOAST` / `DM_FOUND_TOAST`); south goes back a room. **The clue** (#101:
+   "deeper roots and thicker trees indicate the correct path"): the RIGHT exit's mouth is flanked by two
+   **great trees** (`DM_CLUE_TREE_PROP`) and great **roots** (`DM_ROOTS_PROP`, walk-over) run along its
+   corridor; the wrong exits are plain forest -- the signpost at the entrance, the Deepwood hunter and
+   Nyra all say "follow the deepest roots". The way through: room 1 **north**, room 2 **east**, room 3
+   **west**, room 4 **north**. In rooms 2 and 4 a **gnarled tree** stands between the great trees: face it, Confirm, "Use Treefell?" -- Yes fells it
    for good (a saved flag) -- so without a member who LEARNED the move you cannot get through. Also:
    tall-grass pockets in every room (the Deep Woods' creatures, 8-15), two OPTIONAL trainers (a
    Forager in room 2, a Trapper in room 3: generic placeholders in side pockets, looking into them,
@@ -965,8 +976,8 @@ Built by the builder's "THE DEEP WOODS" section (knobs are its constants). How t
 
 **Maze knobs** (`DM_*`): `DM_ROOMS` (the rooms in order: each one's `right` exit, `gate` -- a breakable
 tree in its mouth -- and `carve`: the side passages cut into the walls, `[Rect2i, tile]`), the
-clearing's size (`DM_RX` / `DM_RY`), the lanterns (prop, lit / dark tints, glow), the clue tile, the
-wrong-way toast (`DM_LOST_TOAST`), the signpost / trainers' cells and levels (`LV_DM_*`), the nook /
+clearing's size (`DM_RX` / `DM_RY`), the clue (great-tree / roots props and tints), the Tangled Thicket
+(`DM_LOST_*`: its room, rate, band, table, toasts), the signpost / trainers' cells and levels (`LV_DM_*`), the nook /
 pocket chests. `PropEntity.glow` and the `thicket` prop kind are generic (any area can use them).
 Deterministic: no RNG. Add a room = add a row (and its area folder in `_initialize`'s list and the
 Depths' `area_ids` in `WORLD_LOCATIONS`).
@@ -997,6 +1008,151 @@ Placeholders: Nyra's team (`NYRA_TEAM`), Lyra's team, the move's name ("Treefell
 wrong-way toast), `tests/unit/test_field_moves.gd`, `test_story_humans.gd` (guests and duels),
 `test_region_open.gd` (the Deep Woods open step by step). Screenshots: `docs/screenshots/deep_woods/`
 (`dev_scripts/deep_woods_shots.tscn`).
+
+### Beyond the Heartlands: Beach Village, Frostpeak, the Badlands (DECISIONS.md #43, #46, #49, #57, #69, #73, #85, #88, #95-#97)
+
+Built by the builder's "THE REGIONS PAST THE HEARTLANDS", "THE SUNLIT COAST", "THE SNOWY PEAKS" and
+"THE ROCKY BADLANDS" sections (knobs are their constants). **The roads** open together once the opening
+is over (`REGION_ROADS_OPEN_IF`): the town each road leaves from sets its `world.*` flag silently on
+arrival (Crownhaven: the coast and the badlands; River Crossing: the coast; Woodland Town: Frostpeak),
+so a journey saved before this chapter opens them on its next visit. Nothing forces an order: the
+regional bands and the chiefs' scaling do the pacing (#76 / #80).
+
+**Beach Village** (#43 / #97 -- "fight the chief and get the ability to traverse the water with a
+creature"):
+1. Talk to **Eloi** (the sea chief, he/him per his sheet) by his longhouse: a chief **duel**, SCALED in
+   the coast band (12-20), his final creature carrying the stone placeholder (`ELOI_STONE_BOOST`). A
+   loss whites out; he waits. Winning sets `beach.eloi_beaten` + `fieldmove.tideride`, and he **teaches
+   the sea move** (`tideride`, PLACEHOLDER name "Tideride") to an eligible party member -- a CREATURE
+   (`FIELD_MOVE_SEA_SPECIES`: the water creatures, forge PLACEHOLDERS with no battle moves yet, plus the
+   starter options so every journey has a learner; no humans). Talk again to teach another.
+2. **Riding the sea:** face the water and Confirm (the HUD chip says "Ride" once someone can), "The water
+   is deep. Use Tideride?" -- Yes: the hero rides out on the member who learned it (its roster model
+   under him, scaled to `RIDE_MOUNT_LENGTH`, a foam ring round it). Step onto ANY land (sand, a pier) and
+   the ride ends. Locked / nobody fit: one hint line. Saved or returning from a battle on the water,
+   the hero boots still riding. The **islet** off the east pier (a chest) is reached only this way; the
+   sea route south to the isles stays closed until the isles are built.
+3. **Cael** (#88) is on the promenade: an optional friendly spar (scaled, never permadeath).
+
+**Frostpeak Village** (#49 / #69 / #95):
+1. Everyone is **asleep** -- villagers dozing on their feet in the street (a drifting "z Z"), others in
+   their beds (the inn, a house), Saevi (the winter chief, she/her per her sheet) by her lodge. Talking
+   gets a sleeper's line; nobody turns to you.
+2. In the **inn**, Confirm on an **empty bed** ("Rest"): the party is healed (a real rest) and the hero
+   falls into **the dream** (`frostpeak_dream`): the same village in the new **Dream** lighting preset,
+   glowing crystals, fireflies, nobody but Saevi and the two creatures.
+3. **Saevi**, DISORIENTED (she thinks the hero did this): a chief **duel**, scaled in the Snowy Peaks band
+   (18-26). Won: she sees it was the creatures and tends your party (it is a dream).
+4. The **two mythical creatures** (one of nightmares, one of dreams -- `DREAM_PAIR`, PLACEHOLDER
+   battle-ready roster units) by her lodge: "Face them?" -> a **TACTICAL** battle against both
+   (`ow_frostpeak_dream.tres`): Eliminate All Enemies, **no gem / base to protect**, FIXED at the legend
+   level like a legend (#81), Try Again on a loss. Won: each may be **bonded** (#69; recorded like a
+   legend, never the party -- an assumption to confirm), then the hero **wakes in the inn** and the town
+   wakes with him (`frostpeak.awake`). A creature you declined waits by the frozen pond to ask again.
+   The dream's south trail wakes you early, progress kept.
+
+**The Rocky Badlands** (#46 / #57 / #73 / #96):
+1. Crownhaven's east gate -> **the Rocky Badlands** (route: scrub, a Prospector) -> **Redrock Village**,
+   where the villagers talk about strange hooded people going out into the badlands and the desert.
+2. South of Redrock, **the Red Desert**: a **hooded figure**. Come close and they hurry off -- three
+   stages, then into a cave in the cliffs. The first time they bolt they drop a **crumpled note**.
+3. **The Desert Cave** looks like a **dead end**: the rock at its end sounds hollow. "Speak" -> three words,
+   one pick of four each (`HIDEOUT_PASSWORD` / `HIDEOUT_PW_CHOICES`, PLACEHOLDER words "Dust, Ember,
+   Crown"). **The clue** is split: the note names the first and last words, Redrock's miner overheard
+   the middle one. Right: the rock rolls aside for good (`badlands.hideout_open`; the hideout appears on
+   the world map). Wrong: nothing happens -- try again.
+4. **The hideout:** two halls, five guards (generic PLACEHOLDERS) who battle in **duels**, each watching
+   the corridor through.
+5. At the end, in front of the commander, **General Varden** steps in -- he has been tracking the place
+   (#57) -- and the last fight is **TACTICAL** with him as a **guest** on your side (a player-0 turn-1
+   Reinforcement; `HIDEOUT_ALLY_UNIT`), scaled in the badlands band, Eliminate All Enemies, Try Again on
+   a loss. He is never in two places: the barracks' General is away while he is in the hideout.
+
+**Engine pieces this added** (generic, data-driven): TRAVEL field moves
+(`FieldMoveResource.travel_tiles` / `travel_verb`, `OverworldGrid.riding_tiles`,
+`RideFieldMoveCommand`, `OverworldController.start_ride` / `end_ride`, `OverworldActor.set_mount`);
+USABLE props (`PropEntity.verb` + `on_interact`, every footprint cell); SLEEPING NPCs
+(`NpcEntity.asleep_if` / `sleep_pose` "stand" / "lie", `OverworldActor.set_asleep`); prop kinds `bed`,
+`boulder`, `palm`, `boat`, `tent`; the sign look `note`; the `Dream` lighting preset; the tiles `sand`,
+`red_clay`, `mesa_rock` (PLACEHOLDER art).
+
+Placeholders: every line (TODO(story)), the move's name, the password words, every team (battle-ready
+roster stand-ins -- the water / ice creatures have no moves yet), the two mythical creatures' units,
+the hideout's people and who they serve, all props and the three new tiles. Tests:
+`tests/integration/test_regions_beyond.gd` (+ `_live`: riding, the sleepers), `tests/unit/test_ride_and_sleep.gd`.
+Screenshots: `dev_scripts/regions_beyond_shots.tscn` (not run into the docs yet).
+
+### The post-game (DECISIONS.md #98-#100)
+
+Built by the builder's "THE POST-GAME" section (knobs are its constants). Its two triggers are flags:
+`postgame.hidden_depths_awakened` (`F_POSTGAME`) -- set by beating the **Hidden Depths' boss** (see "The
+dungeons" below; the Hidden Depths' way in, Mountain Base, is not built yet, so in play the post-game is
+still out of reach) -- and `story.final_boss_beaten` (`F_FINAL_BOSS`: the final battle sets it -- not built).
+Quests: "The Risen Island" and "The Frozen Cave" ship; "The Open Grave" is held back until the final battle
+exists (the Quest Editor's validator rejects a quest whose start flag nothing sets).
+Post-game strength: `POSTGAME_BAND` (30-40); its legends are FIXED above it (#81).
+
+1. **The volcano off Stormreef Isle (#98).** Beach Village's sea route (south, by the sea move) now leads
+   to **Stormreef Waters** -- reefs and Stormreef Isle's cliffs (its landing still closed). In the
+   post-game the route leads to `stormreef_waters_erupted` instead: the same water at dusk with a **new
+   volcanic island** in it (ash, black glass, fire, lava in the crater). Ride to it and climb **the
+   Volcano** to its crater, where the new **legend** waits (see "The dungeons": an encounter battle).
+2. **The blizzard and the hidden cave (#99).** Frostpeak now has a **north trail** up to **the Snowy
+   Peaks** (pines, dark rock, scrub with wild creatures). A cave mouth in the north cliff is **sealed by
+   packed ice** (Confirm: one line). In the post-game a **Blizzard** covers Frostpeak and the trail (the new
+   `blizzard` weather -- a snow rig and a white-out overlay on the overworld and in its duels; no combat
+   effects yet), and the seal is **gone**: the **Frozen Cave** -- the ice dungeon (see "The dungeons") -- and
+   its **legend** at the bottom (`ow_glacier_cave.tres`), then the bond.
+3. **The graveyard and the crypt (#100).** A path north off the Sparse Forest's east end (just outside
+   Crownhaven's west gate) leads to **Crownhaven Graveyard**: rows of gravestones, a chapel, the
+   Gravekeeper. After the final boss, one **headstone is dragged aside** and its **tomb is open**: step down
+   into **the Old Crypt** -- the underworld (see "The dungeons"): its boss at the end (TACTICAL, with
+   minions, `ow_crypt_depths.tres`, Try Again on a loss); beating it opens a chest.
+
+**Engine pieces this added:** STORY-DRIVEN AREA WEATHER (`OverworldAreaResource.weather_alt` /
+`weather_if` -> `weather_id_for(state)`, used by the overworld, its duels' backdrop and evolution
+weather triggers); the overworld now RENDERS weather (`OverworldController._apply_area_weather`: a
+`WeatherFX`, skipped headless); the `blizzard` weather (fx kind `snow`: `WeatherRigs._snow`, the overlay's
+`snow_amt`); the sign look `grave` and the prop kind `tomb`.
+
+Placeholders: both triggers (flags), the legends' and the boss's units (`VOLCANO_LEGEND_UNIT` = Oakheart,
+`GLACIER_LEGEND_UNIT` = Bastion, `CRYPT_BOSS_UNIT` = Mortis -- battle-ready stand-ins), every line and
+epitaph, the place names, the Blizzard's (absent) combat rules, all art. Tests:
+`tests/integration/test_postgame.gd`, the blizzard in `test_regions_beyond_live.gd`.
+
+### The dungeons -- the areas before the big battles (DECISIONS.md #101-#106)
+
+Built by the builder's "THE DUNGEONS" section. Every floor is an **ASCII map** in the builder (one string
+per row: readable, and checked by `tests/integration/test_dungeons.gd` -- reachability across areas, the ice
+puzzles solved with the game's own slide rule). Units are battle-ready stand-ins; lines are placeholders.
+
+- **The Deep Woods (#101)** -- see "The Deep Woods": deep roots and great trees mark the right way; the
+  wrong ways lead into the Tangled Thicket (tough, frequent encounters) and back to the start.
+- **The ice dungeon: the Frozen Cave (#102)** -- three levels. Floors 1 and 2 are SLIDE PUZZLES
+  (`OverworldAreaResource.slide_tiles`: step onto the ice and you slide until a rock, a wall, ground or a
+  hole stops you -- `OverworldGrid.slide_path`, `OverworldController._slide`). The right slides (10 and 9
+  of them; the layouts were generated and are solver-checked) end in a **hole** down a level; a wrong slide
+  ends in a **crack** that drops you back to the floor's start. Floor 2 has a ladder back up. Floor 3 is
+  the legend's chamber (a Tactics battle).
+- **The sea dungeon: the Island of Tides (#44 / #103)** -- a **whirlpool** off Stormreef Isle (ridden)
+  carries you to the island (`TIDES_WHIRLPOOL_IF` is the knob for #44's "raining, at night" once the
+  in-game clock and rain exist). Its cave goes DOWN through **whirlpools in small lakes** and **holes** in
+  the floor; some holes lead back UP (cave 1's west hole drops into a sealed hollow whose only way out is
+  up; cave 3's holes lead back to caves 1 and 2). At the bottom, the sea **legend** (Tactics,
+  `ow_tides_depths.tres`; PLACEHOLDER unit `TIDES_LEGEND_UNIT`).
+- **The underworld: the Old Crypt (#104)** -- three straightforward areas, tough creatures in the ash, two
+  **mini bosses** (strong creatures in the doorways: Duels, `MINI_BOSS_STRENGTH`, gone once beaten), then
+  the boss's chamber.
+- **The volcano (#105)** -- from the new island, **the Volcano**: a straightforward climb between lava
+  channels (wild creatures on the ash) to **the crater**, where the legend is an **encounter battle** (a
+  Duel, FIXED at legend level -- no Tactics).
+- **The Hidden Depths (#106)** -- four areas, long and straightforward: a cave, two halls of **ruins**
+  (glowing crystals along the old road), and the heart, with strong wild creatures in the moss
+  throughout. Its **boss** (Tactics, `ow_hidden_depths.tres`) AWAKENS when beaten: `F_POSTGAME`, the
+  post-game begins (#98). Its way in from Mountain Base is not built (the south exit answers until it is).
+
+Engine pieces: `slide_tiles` / `slide_path` / the slide; the props `hole`, `roots`, `great_tree`,
+`whirlpool`; the builder's `_dungeon_floor` / `_paint_ascii` / `_hole` / `_mini_boss` helpers.
 
 ## Dialogue bank & editor
 

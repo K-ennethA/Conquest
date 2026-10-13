@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="FieldMoveResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/FieldMoveResource.gd" id="1_d4f66"]
+
+[resource]
+script = ExtResource("1_d4f66")
+id = &"tideride"
+display_name = "Tideride"
+unlock_flag = "fieldmove.tideride"
+species = Array[StringName]([&"aquaoct", &"supaoctto", &"holly_snowman", &"mystic_snow_spirit", &"storm_vessel", &"tree_grunt", &"petalfang", &"blightcap"])
+locked_hint = "The sea stretches out, deep and blue. With the right partner, you could cross it."
+no_user_hint = "The sea could be crossed with {move} -- but nobody fit in your party has learned it."
+prompt_text = "The water is deep. Use {move}?"
+travel_tiles = Array[StringName]([&"deep_water"])

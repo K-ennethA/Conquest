@@ -18,6 +18,7 @@ extends RefCounted
 ##   open_shop(shop: ShopResource)                               -> void (await; the shop screen)
 ##   open_ladder(tournament: TournamentResource, state)          -> String (await; the ladder pick)
 ##   refresh_world()                                             -> void
+##   start_ride(move_id: StringName, to: Vector3i)              -> void (await; ride a travel move)
 ##
 ## Battles, saves and warps are NOT host calls: they outlive the scene, so they go through the
 ## session (StoryController) -- see [ScriptContext].
@@ -72,4 +73,10 @@ func refresh_world() -> void:
 ## A beaten / befriended VISIBLE wild creature leaves the map ([WildOutcomeCommand]; the save
 ## record is already updated when this is called).
 func despawn_wild(_creature_key: String) -> void:
+	pass
+
+
+## Ride a TRAVEL field move out onto [param _to] ([RideFieldMoveCommand]: the sea move). The base
+## does nothing.
+func start_ride(_move_id: StringName, _to: Vector3i) -> void:
 	pass

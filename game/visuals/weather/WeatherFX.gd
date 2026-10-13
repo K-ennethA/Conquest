@@ -27,6 +27,7 @@ const KINDS := {
 	&"sun": "sun_amt",
 	&"sand": "sand_amt",
 	&"bloom": "bloom_amt",
+	&"snow": "snow_amt",
 }
 
 var _env := WeatherEnvAdapter.new()

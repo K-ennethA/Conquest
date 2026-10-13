@@ -1,0 +1,151 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="1_lkg8r"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="2_yguoy"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/BondLegendCommand.gd" id="3_0ip82"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="4_lejie"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="5_84d8r"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="6_mpom6"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="7_61ug0"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="8_pnvmp"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="9_s1k56"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartBattleCommand.gd" id="10_k4ukp"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="11_x21jp"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="12_dhq1j"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="13_j5tti"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/glacier_cave_3/terrain.tres" id="14_e87ps"]
+
+[sub_resource type="Resource" id="Resource_v7mgh"]
+script = ExtResource("1_lkg8r")
+area_rect = Rect2i(7, 7, 1, 1)
+target_area = &"glacier_cave"
+target_entry = &"mouth"
+id = &"ladder_up"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_q6mm2"]
+script = ExtResource("2_yguoy")
+prop = "crystal"
+footprint = Vector2i(1, 1)
+glow = 2.5
+id = &"ice_crystal_4_4"
+cell = Vector3i(4, 4, 0)
+tint = Color(0.62, 0.86, 1, 1)
+
+[sub_resource type="Resource" id="Resource_b7dwv"]
+script = ExtResource("2_yguoy")
+prop = "crystal"
+footprint = Vector2i(1, 1)
+glow = 2.5
+id = &"ice_crystal_11_4"
+cell = Vector3i(11, 4, 0)
+tint = Color(0.62, 0.86, 1, 1)
+
+[sub_resource type="Resource" id="Resource_pm6ow"]
+script = ExtResource("3_0ip82")
+character_id = &"petalfang"
+
+[sub_resource type="Resource" id="Resource_g2413"]
+script = ExtResource("4_lejie")
+key = "legend.glacier.bonded"
+
+[sub_resource type="Resource" id="Resource_jjhob"]
+script = ExtResource("5_84d8r")
+
+[sub_resource type="Resource" id="Resource_80u65"]
+script = ExtResource("6_mpom6")
+label = "Bond"
+commands = Array[Resource]([SubResource("Resource_pm6ow"), SubResource("Resource_g2413"), SubResource("Resource_jjhob")])
+
+[sub_resource type="Resource" id="Resource_5ivyo"]
+script = ExtResource("6_mpom6")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_stsue"]
+script = ExtResource("7_61ug0")
+text = "Petalfang watches you, still. Bond with it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_w5aiv"]
+script = ExtResource("8_pnvmp")
+prompt = SubResource("Resource_stsue")
+options = Array[Resource]([SubResource("Resource_80u65"), SubResource("Resource_5ivyo")])
+
+[sub_resource type="Resource" id="Resource_fik64"]
+script = ExtResource("11_x21jp")
+encounter_id = "postgame.legend.glacier"
+map_path = "res://game/overworld/content/battles/ow_glacier_cave.tres"
+squad_size = 4
+opponent_name = "Petalfang"
+opponent_team = Array[Dictionary]([{
+"character_id": "petalfang",
+"strength": 1.0
+}])
+reward_flags = Array[String](["postgame.glacier_legend_beaten"])
+defeat_policy = 2
+clash_intro = true
+enemy_level = 45
+boss_battle = true
+
+[sub_resource type="Resource" id="Resource_la0it"]
+script = ExtResource("10_k4ukp")
+spec = SubResource("Resource_fik64")
+
+[sub_resource type="Resource" id="Resource_1nb7c"]
+script = ExtResource("9_s1k56")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_w5aiv")])
+
+[sub_resource type="Resource" id="Resource_dnmgu"]
+script = ExtResource("6_mpom6")
+label = "Face it"
+commands = Array[Resource]([SubResource("Resource_la0it"), SubResource("Resource_1nb7c")])
+
+[sub_resource type="Resource" id="Resource_ukm73"]
+script = ExtResource("6_mpom6")
+label = "Not yet"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_ro4mi"]
+script = ExtResource("7_61ug0")
+text = "Frost creeps across the floor toward you, and the ice itself seems to breathe. Face it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_1nvpo"]
+script = ExtResource("8_pnvmp")
+prompt = SubResource("Resource_ro4mi")
+options = Array[Resource]([SubResource("Resource_dnmgu"), SubResource("Resource_ukm73")])
+
+[sub_resource type="Resource" id="Resource_hayq2"]
+script = ExtResource("9_s1k56")
+condition = "not has(\"postgame.glacier_legend_beaten\")"
+then_commands = Array[Resource]([SubResource("Resource_1nvpo")])
+else_commands = Array[Resource]([SubResource("Resource_w5aiv")])
+
+[sub_resource type="Resource" id="Resource_retby"]
+script = ExtResource("12_dhq1j")
+speaker_name = "Petalfang"
+id = &"glacier_legend"
+cell = Vector3i(7, 1, 0)
+display_name = "Petalfang"
+visual_character = &"petalfang"
+visible_if = "not has(\"legend.glacier.bonded\")"
+on_interact = Array[Resource]([SubResource("Resource_hayq2")])
+
+[resource]
+script = ExtResource("13_j5tti")
+area_id = &"glacier_cave_3"
+display_name = "Frozen Cave"
+terrain = ExtResource("14_e87ps")
+kind = 3
+region_id = &"snowy_peaks"
+world_map_pos = Vector2(0.3, 0.075)
+entry_points = {
+"drop": {
+"cell": [8, 6, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_v7mgh"), SubResource("Resource_q6mm2"), SubResource("Resource_b7dwv"), SubResource("Resource_retby")])
+level_band = Vector2i(30, 40)

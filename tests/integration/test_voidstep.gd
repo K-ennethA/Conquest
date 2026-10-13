@@ -108,7 +108,7 @@ func _move_for(effect: VoidstepEffect) -> MoveResource:
 	var m := MoveResource.new()
 	m.move_id = &"voidstep"
 	m.display_name = "Voidstep"
-	m.element = &"dark"
+	m.element = &"grim"
 	m.category = CombatTypes.DamageCategory.MAGICAL
 	m.cooldown = AUTHORED_PLACE_CD
 	var p := TargetingPattern.new()
@@ -177,7 +177,7 @@ func test_the_authored_move_is_the_shipped_shape() -> void:
 	if move == null:
 		return
 	assert_eq(move.move_id, &"voidstep", "it is the move it says it is")
-	assert_eq(move.element, &"dark", "and it is dark, like everything else Duskmaw does")
+	assert_eq(move.element, &"grim", "and it is dark, like everything else Duskmaw does")
 	assert_eq(move.cooldown, AUTHORED_PLACE_CD,
 		"the AUTHORED cooldown is the SHORT one -- planting an anchor is cheap")
 	assert_true(move.is_valid(), "it has both a pattern and an effect")

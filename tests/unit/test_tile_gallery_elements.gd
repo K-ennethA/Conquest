@@ -58,7 +58,7 @@ func test_a_tile_is_elemented_by_its_own_id() -> void:
 
 func test_a_tile_is_otherwise_elemented_by_the_effect_it_carries() -> void:
 	var tile: TileResource = _tile(&"unlisted_meadow", [_effect(&"sacred_meadow")])
-	assert_eq(TileGallery.tile_element_of(tile), &"nature",
+	assert_eq(TileGallery.tile_element_of(tile), &"plant",
 			"an authored effect elements the tile that carries it")
 
 

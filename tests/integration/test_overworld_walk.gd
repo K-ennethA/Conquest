@@ -389,7 +389,7 @@ func test_trainer_spots_you_and_the_battle_is_staged() -> void:
 	assert_true(StoryController.is_battle_active(), "a story battle is active")
 	# The round trip without GameWorld (the tactical integration suite boots the real board):
 	var win := BattleResult.make("", BattleResult.OUTCOME_VICTORY)
-	win.party_after = [{"member_id": "vineweave", "current_hp": 30, "wounded": false},
+	win.party_after = [{"member_id": "seedant", "current_hp": 30, "wounded": false},
 		{"member_id": "blightcap", "current_hp": 0, "wounded": true}]
 	assert_true(bool(StoryController.report_battle_result(win)["success"]), "the result is reported")
 	assert_false(bool(StoryController.report_battle_result(win)["success"]), "EXACTLY ONCE: a second report is refused")
@@ -413,14 +413,14 @@ func test_whiteout_returns_to_the_wayshrine_healed() -> void:
 	await _step(ow, Vector2i(1, 0))
 	await _drain(ow, 0, 60)
 	var loss := BattleResult.make("", BattleResult.OUTCOME_DEFEAT)
-	loss.party_after = [{"member_id": "vineweave", "current_hp": 0, "wounded": true}]
+	loss.party_after = [{"member_id": "seedant", "current_hp": 0, "wounded": true}]
 	StoryController.report_battle_result(loss)
 	assert_eq(StoryController.end_actions("defeat")[0]["id"], "wayshrine", "the end screen offers the Wayshrine")
 	StoryController.on_end_action("wayshrine")
 	var s: StoryState = StoryController.state()
 	assert_eq(s.location_area(), "oakvale", "whited out to Oakvale")
 	assert_eq(s.location_cell(), Vector3i(10, 10, 0), "at the Wayshrine")
-	assert_false(s.member("vineweave").wounded, "healed")
+	assert_false(s.member("seedant").wounded, "healed")
 	assert_false(s.has_flag("trainer.mossway.bram.defeated"), "Bram is still undefeated")
 	var ow2 := await _boot()
 	await _frames(2)

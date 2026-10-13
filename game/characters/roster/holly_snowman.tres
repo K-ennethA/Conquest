@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/water/holly_snowman_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"holly_snowman"
+element = &"ice"
+element2 = &"plant"
+display_name = "Snolly"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Supaoctto pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/holly_snowman.glb @ 586f2ce; RE-IMPORTED 2026-10-12 from forge 3af4555: the Pixal3D-based proxy_finish mesh the artist picked, same target height): PLACEHOLDER FOR REBALANCE. Stats cloned from supaoctto.tres (Supaoctto, the water-family unit (the snow family with Mystic Snow Spirit); element water (snow; no ice element exists)); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): holly_snowman_forge.glb.import root_scale 0.31326 (= 1.8 / the 3af4555 glb rest height 5.74595) normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-11: 5 ft = 1.524 m) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
+base_health = 108
+base_attack = 27
+base_defense = 15
+base_magic = 8
+base_magic_defense = 11
+base_speed = 12
+base_movement = 5
+attack_range = 2
+model_scale = 0.84823

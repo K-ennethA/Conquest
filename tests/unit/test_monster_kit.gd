@@ -498,7 +498,7 @@ func test_the_maw_is_a_long_range_three_by_three_ground_mark():
 		"the patch is a filled block")
 	assert_eq(move.targeting.area_size, 1, "of Chebyshev radius 1 -- a 3x3")
 	assert_eq(move.cooldown, 3, "and it is a 3-turn cooldown")
-	assert_eq(move.element, &"dark", "dark, like the rest of the kit")
+	assert_eq(move.element, &"grim", "dark, like the rest of the kit")
 
 
 func test_casting_the_maw_telegraphs_the_patch_and_damages_nothing_yet():
@@ -640,7 +640,7 @@ func test_umbral_claw_is_a_three_cell_line():
 	assert_eq(move.targeting.max_range, 1,
 		"aimed at an adjacent cell, so the run covers exactly distance 1-3")
 	assert_eq(move.cooldown, 1, "a 1-turn cooldown")
-	assert_eq(move.element, &"dark", "dark")
+	assert_eq(move.element, &"grim", "dark")
 
 
 func test_umbral_claw_covers_exactly_the_three_cells_ahead():
@@ -765,7 +765,7 @@ func test_a_submerged_unit_takes_nothing_from_tile_or_hazard_damage():
 	# The environmental chain -- what a burning tile and a crawling vine both resolve
 	# through -- short-circuits ahead of mitigation.
 	assert_eq(DamageMath.environment_damage(victim, 40,
-		CombatTypes.DamageCategory.MAGICAL, &"dark", board), 0,
+		CombatTypes.DamageCategory.MAGICAL, &"grim", board), 0,
 		"environmental damage is a hard 0 against a submerged unit")
 
 	# ...and the maw's own eruption is that same chain.
@@ -841,7 +841,7 @@ func test_the_monster_roster_entry_loads_and_validates():
 	var character := load("res://game/characters/roster/monster.tres") as CharacterResource
 	assert_not_null(character, "monster.tres loads as a CharacterResource")
 	assert_eq(character.character_id, &"monster", "its id is 'monster'")
-	assert_eq(character.element, &"dark", "it is a dark unit")
+	assert_eq(character.element, &"grim", "it is a dark unit")
 	assert_eq(character.model_yaw_deg, 0.0,
 		"no yaw correction -- the forge Duskmaw faces -Y in Blender, which exports to +Z (model-forward)")
 	assert_not_null(character.model_scene, "and it carries its imported model")
@@ -874,7 +874,7 @@ func test_the_moveset_and_passive_are_intact():
 	assert_eq(ids, [&"abyssal_maw", &"umbral_claw", &"voidwalk", &"voidstep"],
 		"in the authored order -- slot 3 is VOIDSTEP, which replaced Shadow Dash")
 	for i in range(character.move_count()):
-		assert_eq(character.get_move(i).element, &"dark", "every move is dark")
+		assert_eq(character.get_move(i).element, &"grim", "every move is dark")
 	assert_true(MoveResource.is_ultimate_move(character.get_move(3), 3),
 		"and slot 3 gets the ultimate cut-in by the slot rule, which is where a signature "
 		+ "teleport belongs")

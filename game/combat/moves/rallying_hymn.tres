@@ -18,6 +18,7 @@ area_size = 1
 
 [resource]
 script = ExtResource("3_ov8b1")
+element = &"basic"
 move_id = &"rallying_hymn"
 display_name = "Rallying Hymn"
 description = "Raises attack for allies in a small area for 3 turns."

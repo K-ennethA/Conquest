@@ -11,7 +11,7 @@ func _edge(reqs: Array, skip_story: bool = false) -> EvolutionResource:
 	var e := EvolutionResource.new()
 	e.id = &"test__edge"
 	e.from_id = &"tree_grunt"
-	e.to_id = &"oakheart"
+	e.to_id = &"petalfang"
 	var typed: Array[EvolutionTrigger] = []
 	for r in reqs:
 		typed.append(r)
@@ -181,8 +181,8 @@ func test_party_has_requirement() -> void:
 	assert_false(t.is_met({"uid": "tree_grunt"}), "no party outside story")
 	var line := PartyHasTrigger.new()
 	line.character_id = "tree_grunt"
-	var oak := [{"member_id": "tree_grunt", "character_id": "oakheart", "line": "tree_grunt"}]
-	assert_true(line.is_met({"uid": "x", "party_members": oak}), "a line id matches any of its forms")
+	var evolved := [{"member_id": "tree_grunt", "character_id": "ember_stump", "line": "tree_grunt"}]
+	assert_true(line.is_met({"uid": "x", "party_members": evolved}), "a line id matches any of its forms")
 	assert_string_contains(t.describe(), "Petalfang", "names the companion")
 	assert_true(t.needs_story(), "a story requirement")
 	assert_true(t.responds_to({"kinds": ["party"]}), "a join can change it")
@@ -275,13 +275,20 @@ func test_the_validator_reports_bad_requirements() -> void:
 	assert_string_contains(text, "kind_label", "an unknown kind label")
 
 
-func test_the_shipped_barkling_edge_needs_growth_and_wins() -> void:
+func test_the_shipped_barkling_edge_needs_the_sunstone() -> void:
 	EvolutionLibrary.rescan()
-	var e: EvolutionResource = EvolutionLibrary.get_edge(&"tree_grunt__oakheart")
-	assert_eq(e.triggers.size(), 2, "two requirements")
-	assert_eq(e.describe_triggers(), "Growth 3 + Win 2 battles with it", "Growth 3 + 2 wins")
-	assert_false(e.is_available({"growth": 3}), "Growth alone no longer evolves it")
-	assert_true(e.is_available({"growth": 3, "feats": {"wins": 2}}), "Growth 3 + 2 wins does")
+	var e: EvolutionResource = EvolutionLibrary.get_edge(&"tree_grunt__ember_stump")
+	assert_not_null(e, "Barkling -> Cinderbark ships")
+	if e == null:
+		return
+	assert_eq(e.triggers.size(), 1, "one requirement")
+	assert_string_contains(e.describe_triggers(), "Use ", "using an item")
+	assert_eq(e.use_item_ids(), PackedStringArray(["sunstone"]), "the Sunstone")
+	assert_eq(e.consumed_items("sunstone"), PackedStringArray(["sunstone"]), "spent on evolving")
+	assert_false(e.is_available({"growth": 99, "feats": {"wins": 99}, "mode": "story"}),
+		"Growth and wins alone never evolve it")
+	assert_false(e.is_available({"used_item": "heartwood_charm", "mode": "story"}), "nor another item")
+	assert_true(e.is_available({"used_item": "sunstone", "mode": "story"}), "using the Sunstone does")
 
 
 func test_example_edges_load_and_validate() -> void:

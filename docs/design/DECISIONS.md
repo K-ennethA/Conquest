@@ -391,3 +391,78 @@ asked about. An earlier decision stands unless the owner changes it.
     Pokemon forest. At the end, in the clearing, is the battle: Eldroot is there.
 94. **The rival in Deepwood Village challenges the hero**, then ACCOMPANIES the hero through the Deep
     Woods: not an overworld character while following, but selectable in the Eldroot battle (#88).
+
+### Beach Village, Frostpeak and the Badlands (owner, 2026-10-12)
+95. **Frostpeak Village (refines #49):** when the hero first arrives, EVERYONE IS ASLEEP -- standing
+    and/or in their beds. The hero must REST in the town's INN by clicking on a BED; that takes the hero
+    into a DREAMLIKE version of the village, where the hero battles the CHIEF and then fights the TWO
+    CREATURES in a TACTICAL battle. There is NO GEM TO PROTECT in that battle.
+96. **The Rocky Badlands and Redrock Village (refines #46 / #73):** around the badlands and Redrock the
+    hero hears villagers talking about STRANGE PEOPLE going out into the badlands and the DESERT. The hero
+    FOLLOWS A PERSON INTO THE CAVE. The cave LOOKS LIKE A DEAD END; the hero must find the CLUE to get in
+    (e.g. a PASSWORD to find or figure out). Inside, the hero fights MANY of the enemies in BATTLE
+    (duel) style, then, at the end of the hideout, a TACTICAL battle in which the hero is JOINED BY AN
+    ALLY.
+97. **Beach Village (refines #43):** the main thing there is to FIGHT THE CHIEF and get the ability to
+    TRAVERSE THE WATER WITH A CREATURE.
+
+### The post-game (owner, 2026-10-12)
+98. **The post-game** begins AFTER AWAKENING THE HIDDEN DEPTHS BOSS. NEAR STORMREEF ISLE a VOLCANO
+    ERUPTS: a NEW ISLAND pops up, and a NEW LEGEND creature awaits.
+99. **Near the Snowy Peaks**, a HIDDEN CAVE where a NEW LEGEND creature awaits: the region is being
+    COVERED IN A BLIZZARD, and a previously BLOCKED cave entrance is found (or the terrain changes).
+100. **A graveyard on the outskirts of the central kingdom (Crownhaven):** after DEFEATING THE FINAL BOSS,
+    a TOMBSTONE appears misplaced or open and the hero can ENTER it to go to a NEW LOCATION; at its end
+    the hero fights a BOSS.
+
+### The dungeons -- the areas before the big battles (owner, 2026-10-12)
+101. **The Deep Woods (refines #93):** maze-like; CUT DOWN TREES to progress; DEEPER ROOTS and THICKER
+    TREES indicate the CORRECT PATH; following a WRONG PATH means TOUGH BATTLES -- multiple enemy
+    encounters; Lost Woods style.
+102. **The ice dungeon:** SLIDING across ICE, using the ROCKS and terrain to progress forward; a WRONG
+    SLIP can RESET you; maybe HOLES in the ground, so MULTIPLE LEVELS.
+103. **The sea dungeon:** WHIRLPOOLS and CAVE HOLES (they help you go down, but sometimes BACKTRACK
+    UP); SMALL LAKES in the cave; progress DOWN to the DEPTHS.
+104. **The underworld:** fairly STRAIGHTFORWARD, but TOUGH BATTLES; MINI BOSSES perhaps (the least
+    mapped out for now).
+105. **The volcano:** more STRAIGHTFORWARD; NO TACTICAL BATTLE -- just an ENCOUNTER BATTLE.
+106. **The Hidden Depths:** LONGER and STRAIGHTFORWARD; EPIC RUINS hidden in a CAVE; MANY STRONG
+    ENCOUNTERS.
+- The owner also asked for clear NAMES for the battle types: a PROPOSAL is in
+  docs/design/BATTLE_NAMES.md (not a decision until the owner picks).
+
+### Types, evolutions and the roster pass (owner, 2026-10-12) -- made on the Conquest Roster page
+107. **FIFTEEN TYPES** replace the first seven: BASIC, MARTIAL, FIRE, WATER, PLANT, BUG, ELECTRIC, ICE,
+    WIND, EARTH, METAL, POISON, ASTRAL, GRIM, DRAGON. Renames: nature -> PLANT (plant and bug are
+    separate types), dark -> GRIM (dark and ghost are ONE type), holy -> ASTRAL, "no element" -> BASIC.
+    The chart lives in game/combat/resources/element_chart.tres (1.25 strong, 0.75 resisted). Owner
+    calls beyond the obvious: EARTH beats METAL; METAL beats DRAGON (the knight in the fairy tale) and
+    RESISTS ASTRAL rather than beating it; ASTRAL resists POISON (too pure to be corrupted); BUG beats
+    ASTRAL.
+108. **CREATURES CAN HAVE TWO TYPES**, with "Pokémon logic" on the game's milder scale: each type is a
+    step, the steps add -- weak to both ×1.5, weak to one ×1.25, a weakness plus a resist CANCEL to ×1,
+    resists one ×0.75, resists both ×0.5 (ElementChartResource.dual_step_multipliers). Standing on a
+    tile of either type counts as being at home.
+109. **The roster pass:** the owner retyped most creatures (several to two types) and named the
+    description-only ones (Treasnare -- a mimic chest; Incendrone -- an arsonist firefly; Hushveil;
+    Pangoknight -- a basic soldier that will branch into THREE specialists, which the owner designs;
+    Lintuft -- dust/lint, evolves into Murkbun; Familurr -- a witch's familiar; Rotwight; and others).
+    BASTION and OAKHEART were temporary and are removed as creatures (Bastion remains only as the
+    Destroy Base structure). MORTIS is a HUMAN of the grim type, and so is the SHADOW ASSASSIN.
+110. **ROTWIGHT (the undead) is enemy-only:** never playable or catchable; it ONLY appears when it is
+    raised (Mortis's Undying Legion / Reanimate).
+111. **Evolution lines** set by the owner: Aquaoct -> Supaoctto, Oculith -> Pyroculus, Magmodo ->
+    Magmoo, Seedant -> Vineweave, Lintuft -> Murkbun (Level 16 each), and Barkling -> CINDERBARK, its
+    fire branch, by a FIRE STONE (the Sunstone) -- "like Scyther to Scizor, a redistribution of
+    stats". Barkling -> Oakheart is gone.
+112. **FLEECEFANG (formerly Eclipse Wolf / Eclupus) is the MYTHICAL of nightmares** -- a wolf in sheep's
+    clothing that CHASES a SHEEP who brings good sleep (the dream mythical; the owner has not made the
+    sheep yet). These are the only mythicals so far; every other legend / mythical unit in the content
+    is a PLACEHOLDER stand-in.
+113. **ASTRAL is renamed RADIANT** (owner, 2026-10-12): the light / pure type that beats Grim. ("Spiritual"
+    was considered and passed over because spirits and ghosts already live in Grim.)
+114. **THE THREE STARTERS** at the opening's choice are **AQUAOCT** (water), **SEEDANT** (plant) and
+    **MAGMODO** (fire) (owner, 2026-10-12). NOT YET WIRED: STARTER_OPTIONS in
+    game/overworld/build/build_story_content.gd still offers the placeholder Barkling alone, and all three
+    starters are compendium placeholders with no moves yet (kits proposed in
+    docs/design/CREATURE_KIT_PROPOSALS.md).

@@ -86,6 +86,14 @@ target_entry = &"west_gate"
 id = &"east_exit"
 blocking = false
 
+[sub_resource type="Resource" id="Resource_jibkl"]
+script = ExtResource("6_kabky")
+area_rect = Rect2i(24, 0, 1, 1)
+target_area = &"crownhaven_graveyard"
+target_entry = &"south_gate"
+id = &"graveyard_exit"
+blocking = false
+
 [resource]
 script = ExtResource("7_xx1b6")
 area_id = &"sparse_forest"
@@ -99,11 +107,15 @@ entry_points = {
 "cell": [26, 6, 0],
 "facing": "west"
 },
+"graveyard_path": {
+"cell": [24, 1, 0],
+"facing": "south"
+},
 "west": {
 "cell": [1, 6, 0],
 "facing": "east"
 }
 }
-entities = Array[Resource]([SubResource("Resource_lxepw"), SubResource("Resource_hjhvd"), SubResource("Resource_ae2hf"), SubResource("Resource_imohw"), SubResource("Resource_56w5p"), SubResource("Resource_ap5xq")])
+entities = Array[Resource]([SubResource("Resource_lxepw"), SubResource("Resource_hjhvd"), SubResource("Resource_ae2hf"), SubResource("Resource_imohw"), SubResource("Resource_56w5p"), SubResource("Resource_ap5xq"), SubResource("Resource_jibkl")])
 encounter_zones = Array[Resource]([SubResource("Resource_k0fs6")])
 level_band = Vector2i(8, 15)

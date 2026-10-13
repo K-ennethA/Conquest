@@ -141,7 +141,7 @@ func test_bright_sun_scales_fire_up_and_water_down() -> void:
 	var water := _hit(_move(&"water"))
 	assert_eq(water[0], 16, "water x0.8")
 	assert_eq(water[1], water[0])
-	assert_eq(_hit(_move(&"nature"))[0], 20, "other elements untouched")
+	assert_eq(_hit(_move(&"plant"))[0], 20, "other elements untouched")
 
 
 func test_rain_scales_water_up_and_fire_down() -> void:
@@ -153,7 +153,7 @@ func test_rain_scales_water_up_and_fire_down() -> void:
 
 func test_overbloom_boosts_nature_moves() -> void:
 	_set_weather(&"overbloom")
-	var r := _hit(_move(&"nature"))
+	var r := _hit(_move(&"plant"))
 	assert_eq(r[0], 23, "nature x1.15")
 	assert_eq(r[1], 23)
 
@@ -187,11 +187,11 @@ func test_desert_storm_gives_earth_units_defense() -> void:
 func test_desert_storm_chip_damage_and_immunity() -> void:
 	_set_weather(&"desert_storm")
 	var board := WBoard.new()
-	var plain := WUnit.new(0, &"nature", { "health": 160 })
+	var plain := WUnit.new(0, &"plant", { "health": 160 })
 	var earth := WUnit.new(0, &"earth", { "health": 160 })
 	var proof := WUnit.new(1, &"fire", { "health": 160 })
 	proof.tags = [&"sand_proof"]
-	var tiny := WUnit.new(1, &"dark", { "health": 5 })
+	var tiny := WUnit.new(1, &"grim", { "health": 5 })
 	for u in [plain, earth, proof, tiny]:
 		board.place(u, Vector3i(board.cells.size(), 0, 0))
 		Weather.run_turn_start(u, board)
@@ -206,7 +206,7 @@ func test_desert_storm_chip_damage_and_immunity() -> void:
 func test_overbloom_heals_nature_units_and_pollen_hits_others() -> void:
 	_set_weather(&"overbloom")
 	var board := WBoard.new()
-	var leaf := WUnit.new(0, &"nature", { "health": 100 })
+	var leaf := WUnit.new(0, &"plant", { "health": 100 })
 	var rock := WUnit.new(0, &"earth", { "health": 100 })
 	leaf.hp = 50
 	rock.hp = 50
@@ -266,7 +266,7 @@ func test_rain_bath_heals_only_in_rain() -> void:
 	autofree(sys)
 	sys.add_ability(rain_bath)
 	var board := WBoard.new()
-	var u := WUnit.new(0, &"nature", { "health": 80 })
+	var u := WUnit.new(0, &"plant", { "health": 80 })
 	u.hp = 40
 	board.place(u, Vector3i(0, 0, 0))
 	sys.trigger(AbilityTrigger.Trigger.ON_TURN_START, u, board)
@@ -338,7 +338,7 @@ func test_set_weather_effect_lasts_n_rounds_then_map_weather_resumes() -> void:
 func test_verdant_call_summons_overbloom() -> void:
 	var move: MoveResource = load("res://game/combat/moves/verdant_call.tres")
 	var board := WBoard.new()
-	var u := WUnit.new(0, &"nature")
+	var u := WUnit.new(0, &"plant")
 	board.place(u, Vector3i(1, 1, 0))
 	var res := MoveExecutor.execute(move, u, board, Vector3i(1, 1, 0))
 	assert_true(res["success"])

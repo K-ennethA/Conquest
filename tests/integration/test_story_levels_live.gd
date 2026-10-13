@@ -165,7 +165,7 @@ func test_tactical_story_battle_spawns_both_sides_at_their_levels_and_pays_xp() 
 	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.set_location("mossway", Vector3i(19, 6, 0), "north")
-	s.member("vineweave").set_level(12)
+	s.member("seedant").set_level(12)
 	s.member("blightcap").set_level(9)
 	var vine_res: CharacterResource = CharacterLibrary.get_character(&"vineweave")
 	var vine_base_hp: int = vine_res.base_health
@@ -197,7 +197,7 @@ func test_tactical_story_battle_spawns_both_sides_at_their_levels_and_pays_xp() 
 	assert_gt(foes, 0, "the board has foes")
 	assert_eq(vine_res.base_health, vine_base_hp, "the roster resource is never mutated (a duplicate was levelled)")
 
-	var xp_before: int = s.member("vineweave").xp
+	var xp_before: int = s.member("seedant").xp
 	for u in CombatServices.board().all_units():
 		if not u.has_meta(StoryBattleBridge.MEMBER_META):
 			u.take_damage(99999)
@@ -214,7 +214,7 @@ func test_tactical_story_battle_spawns_both_sides_at_their_levels_and_pays_xp() 
 		assert_true(box.visible, "showing this battle's XP")
 	var buttons: Array[Button] = screen.mode_action_buttons()
 	buttons[0].pressed.emit()
-	assert_gt(s.member("vineweave").xp, xp_before, "Continue pays the XP")
+	assert_gt(s.member("seedant").xp, xp_before, "Continue pays the XP")
 
 
 func test_plain_skirmish_on_the_same_board_spawns_no_levels() -> void:

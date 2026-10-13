@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/dark/vulture_creature_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"vulture_creature"
+element = &"grim"
+element2 = &"wind"
+display_name = "Carrionix"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Raven Rogue pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-12 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca / 3903aab pattern, light-flow colour like 666d195; forge rigged/vulture_creature.glb v2.1 @ 0757911: the Pixal3D-based proxy_finish light-flow mesh, colour in the albedo texture (basecolor = albedo x AO), green Glow on the eye cores + skull-pendant sockets): PLACEHOLDER FOR REBALANCE. Stats cloned from raven_rogue.tres (Raven Rogue, the other dark bird -- the fast single-weapon physical line it took from Wren, range 1 / speed 12; element dark (black-feathered, skull-helmeted spectre vulture with green-glowing eyes, shadow family)); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): vulture_creature_forge.glb.import root_scale 0.2609 (= 1.8 / the 0757911 glb rest height 6.89908) normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-12: 5 ft = 1.524 m) / the measured imported idle extent 1.83167 (first frame, top - bottom, as the size table measures it).
+base_health = 95
+base_attack = 15
+base_defense = 12
+base_magic = 6
+base_magic_defense = 10
+base_speed = 12
+base_movement = 4
+attack_range = 1
+model_scale = 0.83203

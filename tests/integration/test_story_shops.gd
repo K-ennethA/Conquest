@@ -137,7 +137,7 @@ func test_buy_use_and_sell_back_at_the_crownhaven_merchant() -> void:
 	assert_eq(int(StorySaveManager.peek(1)["gold"]), 20, "leaving saved the journey")
 
 	# Use one from Journey -> Bag on a hurt member.
-	var vine: StoryPartyMember = s.member("vineweave")
+	var vine: StoryPartyMember = s.member("seedant")
 	var blight: StoryPartyMember = s.member("blightcap")
 	vine.current_hp = 50
 	ow.open_journey_menu()
@@ -147,7 +147,7 @@ func test_buy_use_and_sell_back_at_the_crownhaven_merchant() -> void:
 	assert_not_null(card, "the tonic is in the bag")
 	var on_blight := card.find_child("Use_blightcap", true, false) as Button
 	assert_true(on_blight.disabled, "a full-HP member's button is disabled: a heal is never wasted")
-	var on_vine := card.find_child("Use_vineweave", true, false) as Button
+	var on_vine := card.find_child("Use_seedant", true, false) as Button
 	assert_false(on_vine.disabled, "the hurt member's is not")
 	on_vine.pressed.emit()
 	await _frames(2)

@@ -1,0 +1,263 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_afpn2"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="2_onm5f"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="3_kueuw"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="4_qa5mb"]
+[ext_resource type="Script" path="res://game/overworld/data/TrainerEntity.gd" id="5_0l4fn"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="6_5dvfg"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="7_hvhsj"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/badlands_hideout/terrain.tres" id="8_msofq"]
+
+[sub_resource type="Resource" id="Resource_lh2ha"]
+script = ExtResource("1_afpn2")
+prop = "tent"
+footprint = Vector2i(2, 1)
+id = &"ho_tent_w"
+cell = Vector3i(1, 6, 0)
+tint = Color(0.42, 0.36, 0.3, 1)
+
+[sub_resource type="Resource" id="Resource_s8lwo"]
+script = ExtResource("1_afpn2")
+prop = "tent"
+footprint = Vector2i(2, 1)
+id = &"ho_tent_e"
+cell = Vector3i(13, 3, 0)
+tint = Color(0.378, 0.324, 0.27, 1)
+
+[sub_resource type="Resource" id="Resource_hjrsu"]
+script = ExtResource("1_afpn2")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"ho_crates_1_2"
+cell = Vector3i(1, 2, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_snidg"]
+script = ExtResource("1_afpn2")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"ho_crates_14_11"
+cell = Vector3i(14, 11, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_odv3s"]
+script = ExtResource("1_afpn2")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"ho_crates_1_12"
+cell = Vector3i(1, 12, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_4d4xw"]
+script = ExtResource("1_afpn2")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"ho_crates_14_7"
+cell = Vector3i(14, 7, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_oq75o"]
+script = ExtResource("1_afpn2")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 2.5
+id = &"ho_lamp_5_1"
+cell = Vector3i(5, 1, 0)
+tint = Color(1, 0.7, 0.36, 1)
+
+[sub_resource type="Resource" id="Resource_dxjvf"]
+script = ExtResource("1_afpn2")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 2.5
+id = &"ho_lamp_9_12"
+cell = Vector3i(9, 12, 0)
+tint = Color(1, 0.7, 0.36, 1)
+
+[sub_resource type="Resource" id="Resource_kxnqm"]
+script = ExtResource("2_onm5f")
+kind = 1
+opponent_name = "Hideout Guard"
+opponent_speaker_id = &"npc_guard_1"
+opponent_team = Array[Dictionary]([{
+"character_id": "tree_grunt",
+"strength": 0.95
+}])
+reward_gold = 200
+clash_intro = true
+enemy_level = 23
+
+[sub_resource type="Resource" id="Resource_s5hkf"]
+script = ExtResource("3_kueuw")
+speaker_id = &"self"
+side = &"right"
+text = "Ugh... the commander won't be happy."
+
+[sub_resource type="Resource" id="Resource_qdcfg"]
+script = ExtResource("4_qa5mb")
+scene_id = &"hideout_guard_1_after"
+beats = Array[Resource]([SubResource("Resource_s5hkf")])
+
+[sub_resource type="Resource" id="Resource_33la1"]
+script = ExtResource("3_kueuw")
+speaker_id = &"self"
+side = &"right"
+text = "Nobody gets through here!"
+
+[sub_resource type="Resource" id="Resource_yhac8"]
+script = ExtResource("4_qa5mb")
+scene_id = &"hideout_guard_1_pre"
+beats = Array[Resource]([SubResource("Resource_33la1")])
+
+[sub_resource type="Resource" id="Resource_h1is3"]
+script = ExtResource("5_0l4fn")
+battle = SubResource("Resource_kxnqm")
+pre_scene = SubResource("Resource_yhac8")
+defeated_scene = SubResource("Resource_qdcfg")
+speaker_id = &"npc_guard_1"
+speaker_name = "Hideout Guard"
+figure = "raider"
+id = &"guard_1"
+cell = Vector3i(5, 10, 0)
+facing = "east"
+display_name = "Hideout Guard"
+tint = Color(0.49600002, 0.128, 0.096, 1)
+
+[sub_resource type="Resource" id="Resource_umoxo"]
+script = ExtResource("2_onm5f")
+kind = 1
+opponent_name = "Hideout Guard"
+opponent_speaker_id = &"npc_guard_2"
+opponent_team = Array[Dictionary]([{
+"character_id": "blightcap",
+"strength": 0.95
+}, {
+"character_id": "mycothrall",
+"strength": 0.9
+}])
+reward_gold = 220
+clash_intro = true
+enemy_level = 24
+
+[sub_resource type="Resource" id="Resource_ekndg"]
+script = ExtResource("3_kueuw")
+speaker_id = &"self"
+side = &"right"
+text = "How...?"
+
+[sub_resource type="Resource" id="Resource_gitrq"]
+script = ExtResource("4_qa5mb")
+scene_id = &"hideout_guard_2_after"
+beats = Array[Resource]([SubResource("Resource_ekndg")])
+
+[sub_resource type="Resource" id="Resource_fqxed"]
+script = ExtResource("3_kueuw")
+speaker_id = &"self"
+side = &"right"
+text = "How did you find this place?!"
+
+[sub_resource type="Resource" id="Resource_bwqrf"]
+script = ExtResource("4_qa5mb")
+scene_id = &"hideout_guard_2_pre"
+beats = Array[Resource]([SubResource("Resource_fqxed")])
+
+[sub_resource type="Resource" id="Resource_hrpec"]
+script = ExtResource("5_0l4fn")
+battle = SubResource("Resource_umoxo")
+pre_scene = SubResource("Resource_bwqrf")
+defeated_scene = SubResource("Resource_gitrq")
+speaker_id = &"npc_guard_2"
+speaker_name = "Hideout Guard"
+figure = "raider"
+id = &"guard_2"
+cell = Vector3i(10, 7, 0)
+facing = "west"
+display_name = "Hideout Guard"
+tint = Color(0.49600002, 0.128, 0.096, 1)
+
+[sub_resource type="Resource" id="Resource_w41wn"]
+script = ExtResource("2_onm5f")
+kind = 1
+opponent_name = "Hideout Guard"
+opponent_speaker_id = &"npc_guard_3"
+opponent_team = Array[Dictionary]([{
+"character_id": "monster",
+"strength": 0.95
+}])
+reward_gold = 240
+clash_intro = true
+enemy_level = 24
+
+[sub_resource type="Resource" id="Resource_jw6ye"]
+script = ExtResource("3_kueuw")
+speaker_id = &"self"
+side = &"right"
+text = "Fine. Go on, then -- see where it gets you."
+
+[sub_resource type="Resource" id="Resource_3k3t1"]
+script = ExtResource("4_qa5mb")
+scene_id = &"hideout_guard_3_after"
+beats = Array[Resource]([SubResource("Resource_jw6ye")])
+
+[sub_resource type="Resource" id="Resource_367w3"]
+script = ExtResource("3_kueuw")
+speaker_id = &"self"
+side = &"right"
+text = "Intruder! Stop right there!"
+
+[sub_resource type="Resource" id="Resource_kqiha"]
+script = ExtResource("4_qa5mb")
+scene_id = &"hideout_guard_3_pre"
+beats = Array[Resource]([SubResource("Resource_367w3")])
+
+[sub_resource type="Resource" id="Resource_pepia"]
+script = ExtResource("5_0l4fn")
+battle = SubResource("Resource_w41wn")
+pre_scene = SubResource("Resource_kqiha")
+defeated_scene = SubResource("Resource_3k3t1")
+speaker_id = &"npc_guard_3"
+speaker_name = "Hideout Guard"
+figure = "raider"
+id = &"guard_3"
+cell = Vector3i(5, 3, 0)
+facing = "east"
+display_name = "Hideout Guard"
+tint = Color(0.49600002, 0.128, 0.096, 1)
+
+[sub_resource type="Resource" id="Resource_ufmmf"]
+script = ExtResource("6_5dvfg")
+area_rect = Rect2i(7, 13, 1, 1)
+target_area = &"badlands_cave"
+target_entry = &"hideout"
+id = &"south_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_pnkhg"]
+script = ExtResource("6_5dvfg")
+area_rect = Rect2i(7, 0, 1, 1)
+target_area = &"badlands_hideout_depths"
+target_entry = &"south"
+id = &"north_exit"
+blocking = false
+
+[resource]
+script = ExtResource("7_hvhsj")
+area_id = &"badlands_hideout"
+display_name = "Secret Hideout"
+terrain = ExtResource("8_msofq")
+kind = 3
+region_id = &"rocky_badlands"
+world_map_pos = Vector2(0.772, 0.532)
+entry_points = {
+"north": {
+"cell": [7, 1, 0],
+"facing": "south"
+},
+"south": {
+"cell": [7, 12, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_lh2ha"), SubResource("Resource_s8lwo"), SubResource("Resource_hjrsu"), SubResource("Resource_snidg"), SubResource("Resource_odv3s"), SubResource("Resource_4d4xw"), SubResource("Resource_oq75o"), SubResource("Resource_dxjvf"), SubResource("Resource_h1is3"), SubResource("Resource_hrpec"), SubResource("Resource_pepia"), SubResource("Resource_ufmmf"), SubResource("Resource_pnkhg")])
+level_band = Vector2i(22, 30)

@@ -1,0 +1,270 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="1_83ut6"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="2_1q72f"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="3_4wgfi"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="4_wi0mj"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_6elqq"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="6_niuxe"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="7_u2kyu"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="8_pgrcw"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="9_0v3bd"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="10_abb3c"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="11_3g02w"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/badlands_cave/terrain.tres" id="12_wqaas"]
+
+[sub_resource type="Resource" id="Resource_8ui1d"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.1"
+
+[sub_resource type="Resource" id="Resource_ok58v"]
+script = ExtResource("2_1q72f")
+label = "Stone"
+commands = Array[Resource]([SubResource("Resource_8ui1d")])
+
+[sub_resource type="Resource" id="Resource_k180l"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.1"
+value = 2
+
+[sub_resource type="Resource" id="Resource_4bn8a"]
+script = ExtResource("2_1q72f")
+label = "Dust"
+commands = Array[Resource]([SubResource("Resource_k180l")])
+
+[sub_resource type="Resource" id="Resource_as4hl"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.1"
+value = 3
+
+[sub_resource type="Resource" id="Resource_8kxec"]
+script = ExtResource("2_1q72f")
+label = "Sun"
+commands = Array[Resource]([SubResource("Resource_as4hl")])
+
+[sub_resource type="Resource" id="Resource_8rdlm"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.1"
+value = 4
+
+[sub_resource type="Resource" id="Resource_mkc0r"]
+script = ExtResource("2_1q72f")
+label = "Ash"
+commands = Array[Resource]([SubResource("Resource_8rdlm")])
+
+[sub_resource type="Resource" id="Resource_6oduq"]
+script = ExtResource("3_4wgfi")
+text = "You speak the first word..."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_wnrxx"]
+script = ExtResource("4_wi0mj")
+prompt = SubResource("Resource_6oduq")
+options = Array[Resource]([SubResource("Resource_ok58v"), SubResource("Resource_4bn8a"), SubResource("Resource_8kxec"), SubResource("Resource_mkc0r")])
+
+[sub_resource type="Resource" id="Resource_ulbty"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.2"
+
+[sub_resource type="Resource" id="Resource_760s0"]
+script = ExtResource("2_1q72f")
+label = "River"
+commands = Array[Resource]([SubResource("Resource_ulbty")])
+
+[sub_resource type="Resource" id="Resource_c66qx"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.2"
+value = 2
+
+[sub_resource type="Resource" id="Resource_5npmw"]
+script = ExtResource("2_1q72f")
+label = "Iron"
+commands = Array[Resource]([SubResource("Resource_c66qx")])
+
+[sub_resource type="Resource" id="Resource_l8m0k"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.2"
+value = 3
+
+[sub_resource type="Resource" id="Resource_f6q3q"]
+script = ExtResource("2_1q72f")
+label = "Ember"
+commands = Array[Resource]([SubResource("Resource_l8m0k")])
+
+[sub_resource type="Resource" id="Resource_3bnpk"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.2"
+value = 4
+
+[sub_resource type="Resource" id="Resource_yrwrg"]
+script = ExtResource("2_1q72f")
+label = "Night"
+commands = Array[Resource]([SubResource("Resource_3bnpk")])
+
+[sub_resource type="Resource" id="Resource_s5bqj"]
+script = ExtResource("3_4wgfi")
+text = "You speak the next word..."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_0ivvp"]
+script = ExtResource("4_wi0mj")
+prompt = SubResource("Resource_s5bqj")
+options = Array[Resource]([SubResource("Resource_760s0"), SubResource("Resource_5npmw"), SubResource("Resource_f6q3q"), SubResource("Resource_yrwrg")])
+
+[sub_resource type="Resource" id="Resource_rg3ys"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.3"
+
+[sub_resource type="Resource" id="Resource_pxpam"]
+script = ExtResource("2_1q72f")
+label = "Wolf"
+commands = Array[Resource]([SubResource("Resource_rg3ys")])
+
+[sub_resource type="Resource" id="Resource_duf17"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.3"
+value = 2
+
+[sub_resource type="Resource" id="Resource_fhfec"]
+script = ExtResource("2_1q72f")
+label = "Gate"
+commands = Array[Resource]([SubResource("Resource_duf17")])
+
+[sub_resource type="Resource" id="Resource_lquq4"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.3"
+value = 3
+
+[sub_resource type="Resource" id="Resource_3lqyg"]
+script = ExtResource("2_1q72f")
+label = "Key"
+commands = Array[Resource]([SubResource("Resource_lquq4")])
+
+[sub_resource type="Resource" id="Resource_own8j"]
+script = ExtResource("1_83ut6")
+key = "badlands.password.3"
+value = 4
+
+[sub_resource type="Resource" id="Resource_vkmal"]
+script = ExtResource("2_1q72f")
+label = "Crown"
+commands = Array[Resource]([SubResource("Resource_own8j")])
+
+[sub_resource type="Resource" id="Resource_v2aev"]
+script = ExtResource("3_4wgfi")
+text = "You speak the last word..."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_7wu0k"]
+script = ExtResource("4_wi0mj")
+prompt = SubResource("Resource_v2aev")
+options = Array[Resource]([SubResource("Resource_pxpam"), SubResource("Resource_fhfec"), SubResource("Resource_3lqyg"), SubResource("Resource_vkmal")])
+
+[sub_resource type="Resource" id="Resource_uvnie"]
+script = ExtResource("3_4wgfi")
+text = "Your voice echoes off the stone. Nothing happens."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_w220y"]
+script = ExtResource("5_6elqq")
+beats = Array[Resource]([SubResource("Resource_uvnie")])
+
+[sub_resource type="Resource" id="Resource_ogwus"]
+script = ExtResource("3_4wgfi")
+text = "A low grinding answers you. The rock shudders -- and rolls aside, onto a passage lit by lamps."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_3iuy8"]
+script = ExtResource("5_6elqq")
+beats = Array[Resource]([SubResource("Resource_ogwus")])
+
+[sub_resource type="Resource" id="Resource_hsa2x"]
+script = ExtResource("1_83ut6")
+key = "badlands.hideout_open"
+
+[sub_resource type="Resource" id="Resource_2oav2"]
+script = ExtResource("7_u2kyu")
+
+[sub_resource type="Resource" id="Resource_7bw4c"]
+script = ExtResource("6_niuxe")
+condition = "flag(\"badlands.password.1\") == 2 and flag(\"badlands.password.2\") == 3 and flag(\"badlands.password.3\") == 4"
+then_commands = Array[Resource]([SubResource("Resource_3iuy8"), SubResource("Resource_hsa2x"), SubResource("Resource_2oav2")])
+else_commands = Array[Resource]([SubResource("Resource_w220y")])
+
+[sub_resource type="Resource" id="Resource_gdygv"]
+script = ExtResource("2_1q72f")
+label = "Speak"
+commands = Array[Resource]([SubResource("Resource_wnrxx"), SubResource("Resource_0ivvp"), SubResource("Resource_7wu0k"), SubResource("Resource_7bw4c")])
+
+[sub_resource type="Resource" id="Resource_v7su2"]
+script = ExtResource("2_1q72f")
+label = "Leave it"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_3e157"]
+script = ExtResource("3_4wgfi")
+text = "A dead end. But this rock is scratched with marks, and it sounds hollow when you knock on it. Say something?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_yuaay"]
+script = ExtResource("4_wi0mj")
+prompt = SubResource("Resource_3e157")
+options = Array[Resource]([SubResource("Resource_gdygv"), SubResource("Resource_v7su2")])
+
+[sub_resource type="Resource" id="Resource_05lwh"]
+script = ExtResource("8_pgrcw")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"sealed_rock"
+cell = Vector3i(7, 1, 0)
+tint = Color(0.52, 0.28, 0.2, 1)
+visible_if = "not has(\"badlands.hideout_open\")"
+on_interact = Array[Resource]([SubResource("Resource_yuaay")])
+
+[sub_resource type="Resource" id="Resource_s2ibk"]
+script = ExtResource("9_0v3bd")
+loot_items = Array[StringName]([&"mossleaf_tonic", &"bitterroot_salve"])
+loot_gold = 90
+id = &"pocket_chest"
+cell = Vector3i(2, 12, 0)
+facing = "east"
+display_name = "Chest"
+tint = Color(0.42, 0.3, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_5v4d6"]
+script = ExtResource("10_abb3c")
+area_rect = Rect2i(6, 15, 1, 1)
+target_area = &"red_desert"
+target_entry = &"cave_mouth"
+id = &"mouth_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_bqiph"]
+script = ExtResource("10_abb3c")
+area_rect = Rect2i(7, 1, 1, 1)
+target_area = &"badlands_hideout"
+target_entry = &"south"
+id = &"hideout_door"
+blocking = false
+visible_if = "has(\"badlands.hideout_open\")"
+
+[resource]
+script = ExtResource("11_3g02w")
+area_id = &"badlands_cave"
+display_name = "Desert Cave"
+terrain = ExtResource("12_wqaas")
+kind = 3
+region_id = &"rocky_badlands"
+world_map_pos = Vector2(0.8, 0.492)
+entry_points = {
+"hideout": {
+"cell": [7, 2, 0],
+"facing": "south"
+},
+"mouth": {
+"cell": [6, 14, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_05lwh"), SubResource("Resource_s2ibk"), SubResource("Resource_5v4d6"), SubResource("Resource_bqiph")])
+level_band = Vector2i(22, 30)

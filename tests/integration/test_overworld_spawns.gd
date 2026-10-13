@@ -72,6 +72,12 @@ func test_every_entry_is_a_real_place_to_stand() -> void:
 				var e: Dictionary = a.entry(eid)
 				var c: Vector3i = e["cell"]
 				var tag: String = "%s/%s (%s)" % [a.area_id, eid, stage]
+				# An arrival by sea lands on the water, riding: the hero boots riding there (DECISIONS.md #43).
+				var fm: FieldMoveResource = FieldMoveResource.travel_move_for(g.tile_id_at(c))
+				var ride: Array[StringName] = []
+				if fm != null:
+					ride = fm.travel_tiles
+				g.riding_tiles = ride
 				assert_true(g.is_walkable(c), "%s: walkable, no prop or NPC on it (%s)" % [tag, g.blocker_at(c)])
 				assert_null(_warp_at(a, s, c), "%s: not on an exit (no bounce-back)" % tag)
 				assert_false(g.walkable_neighbours(c).is_empty(), "%s: not boxed in" % tag)
@@ -102,6 +108,11 @@ func test_every_open_warp_lands_on_walkable_ground() -> void:
 				if te.is_empty():
 					continue
 				var tg := OverworldGrid.build(t, s)
+				# A warp from the water lands on the water: the hero arrives riding (DECISIONS.md #43).
+				var src := OverworldGrid.from_map(a.terrain)
+				var ride_fm: FieldMoveResource = FieldMoveResource.travel_move_for(src.tile_id_at(w.cells()[0]))
+				if ride_fm != null:
+					tg.riding_tiles = ride_fm.travel_tiles
 				for wc in w.cells():
 					# Exactly StoryController.warp_to's choice.
 					var arrive: Vector3i = te["cell"]

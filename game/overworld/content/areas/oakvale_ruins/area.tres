@@ -251,10 +251,10 @@ ai_difficulty = 0
 opponent_name = "Enemy Soldiers"
 opponent_speaker_id = &"npc_raider_captain"
 opponent_team = Array[Dictionary]([{
-"character_id": "undead",
+"character_id": "tree_grunt",
 "strength": 1.0
 }, {
-"character_id": "undead",
+"character_id": "petalfang",
 "strength": 1.0
 }, {
 "character_id": "blightcap",
@@ -389,10 +389,10 @@ ai_difficulty = 0
 opponent_name = "Enemy Soldiers"
 opponent_speaker_id = &"npc_raider_captain"
 opponent_team = Array[Dictionary]([{
-"character_id": "undead",
+"character_id": "tree_grunt",
 "strength": 1.0
 }, {
-"character_id": "undead",
+"character_id": "petalfang",
 "strength": 1.0
 }, {
 "character_id": "blightcap",
@@ -713,10 +713,10 @@ ai_difficulty = 0
 opponent_name = "Enemy Soldiers"
 opponent_speaker_id = &"npc_raider_captain"
 opponent_team = Array[Dictionary]([{
-"character_id": "undead",
+"character_id": "tree_grunt",
 "strength": 1.0
 }, {
-"character_id": "undead",
+"character_id": "petalfang",
 "strength": 1.0
 }, {
 "character_id": "blightcap",

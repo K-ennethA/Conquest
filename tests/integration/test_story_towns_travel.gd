@@ -3,7 +3,7 @@ extends GutTest
 ## TRAVEL BETWEEN THE BUILT-OUT TOWNS, booted for real (OverworldScene.tscn as the current scene):
 ## Oakvale -> the Mossway -> River Crossing -> Crownhaven -> the Sparse Forest -> Woodland Town and back, each hop a real
 ## step onto the exit tile of the shipped content, plus the road stubs that stay closed for now
-## (Farm Hamlet, Deepwood Village, the Hidden Thieves Guild, Frostpeak, Mountain Base, the Badlands, Beach Village). Content checks
+## (Farm Hamlet, the Hidden Thieves Guild, Mountain Base) and the roads to the regions beyond. Content checks
 ## (layout, props, people) live in test_overworld_content.gd.
 
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
@@ -147,11 +147,7 @@ func test_roads_not_yet_open_turn_you_back() -> void:
 		["oakvale_ruins", Vector3i(1, 12, 0), Vector2i(-1, 0), "the Farm Hamlet track (after the raid)"],
 		["woodland_town", Vector3i(1, 12, 0), Vector2i(-1, 0), "the road to Deepwood Village"],
 		["woodland_town", Vector3i(4, 22, 0), Vector2i(0, 1), "the south trail"],
-		["woodland_town", Vector3i(17, 1, 0), Vector2i(0, -1), "the north trail to Frostpeak"],
 		["crownhaven", Vector3i(9, 1, 0), Vector2i(0, -1), "the Mountain Road"],
-		["crownhaven", Vector3i(28, 13, 0), Vector2i(1, 0), "the Redrock road"],
-		["crownhaven", Vector3i(28, 17, 0), Vector2i(1, 0), "the coast road from the harbour gate"],
-		["river_crossing", Vector3i(22, 14, 0), Vector2i(1, 0), "the coast road from River Crossing"],
 	]:
 		StoryController.end_session()
 		var ow := await _boot(spec[0], spec[1], "south")
@@ -161,4 +157,23 @@ func test_roads_not_yet_open_turn_you_back() -> void:
 		assert_eq(s.location_area(), spec[0], "%s stays in %s" % [spec[3], spec[0]])
 		assert_true(StoryController.is_script_running() or ow.dialogue().root_control().visible,
 			"%s explains itself" % spec[3])
+		await _drain(ow)
+
+
+## The roads to the coast, the peaks and the badlands open (silently) once the opening is over: the town
+## each leaves from sets its flag on arrival, and the road leads on (docs/STORY_MODE.md "Beyond the
+## Heartlands").
+func test_the_regions_roads_lead_on_after_the_opening() -> void:
+	for spec in [
+		["woodland_town", Vector3i(17, 1, 0), Vector2i(0, -1), "frostpeak_village", "the north trail to Frostpeak"],
+		["crownhaven", Vector3i(28, 13, 0), Vector2i(1, 0), "rocky_badlands", "the Redrock road"],
+		["crownhaven", Vector3i(28, 17, 0), Vector2i(1, 0), "beach_village", "the coast road from the harbour gate"],
+		["river_crossing", Vector3i(22, 14, 0), Vector2i(1, 0), "beach_village", "the coast road from River Crossing"],
+	]:
+		StoryController.end_session()
+		var ow := await _boot(spec[0], spec[1], "south")
+		var s: StoryState = StoryController.state()
+		await _drain(ow)
+		await _step(ow, spec[2])
+		assert_eq(s.location_area(), spec[3], "%s leads to %s" % [spec[4], spec[3]])
 		await _drain(ow)

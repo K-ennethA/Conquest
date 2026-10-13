@@ -60,7 +60,7 @@ const GROUP_NAME: StringName = &"portrait_cache"
 const DISK_DIR: String = "user://cache/portraits/"
 ## Bump this to invalidate every previously-captured portrait without touching disk --
 ## the filename changes, so old files are simply never looked at again.
-const CACHE_VERSION: String = "v1"
+const CACHE_VERSION: String = "v2"  # v2: camera kept clear of long models (blank komodo)
 
 # --- Capture geometry -----------------------------------------------------------
 const CAPTURE_SIZE: int = 256
@@ -434,6 +434,9 @@ func _frame_camera(aabb: AABB) -> void:
 	var frame_h: float = head_h / FRAME_FILL_FRACTION
 	var half_fov: float = deg_to_rad(CAPTURE_FOV_DEG) * 0.5
 	var distance: float = maxf((frame_h * 0.5) / tan(half_fov), 0.3)
+	# A long, low model (a komodo) reaches further toward the camera than the head framing
+	# distance: keep the camera in front of the model's near face, never inside the body.
+	distance = maxf(distance, aabb.size.z * 0.5 + 0.15)
 
 	var target := Vector3(center_x, target_y, center_z)
 	var cam_pos := target + Vector3(0.0, 0.0, distance)

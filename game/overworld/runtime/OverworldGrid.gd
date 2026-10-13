@@ -24,6 +24,10 @@ var _passable: PackedByteArray = PackedByteArray()
 var _blocks_sight: PackedByteArray = PackedByteArray()
 ## Vector3i -> entity id (String) for blocking entities.
 var _blockers: Dictionary = {}
+## RIDING a travel field move ([member FieldMoveResource.travel_tiles], e.g. crossing the sea on a
+## creature): these otherwise-blocking tiles are passable while the hero rides. Empty = on foot.
+## Land stays passable while riding (stepping ashore ends the ride: the controller's call).
+var riding_tiles: Array[StringName] = []
 
 
 ## Build from [param area]'s terrain and the entities present under [param state]. The
@@ -158,9 +162,40 @@ func tile_id_at(cell: Vector3i) -> StringName:
 	return _tile_ids[_i(cell)] if in_bounds(cell) else &""
 
 
-## Terrain alone lets you stand here.
+## Terrain alone lets you stand here (on foot, or -- while riding -- on a ridden tile).
 func is_terrain_passable(cell: Vector3i) -> bool:
-	return in_bounds(cell) and _passable[_i(cell)] == 1
+	if not in_bounds(cell):
+		return false
+	if _passable[_i(cell)] == 1:
+		return true
+	return not riding_tiles.is_empty() and riding_tiles.has(_tile_ids[_i(cell)])
+
+
+## THE SLIDE from [param start] heading [param dir] over [param slide_tiles] (an ice floor): the cells the
+## hero passes, in order, ending where he stops -- the first step must be walkable (else []); then he
+## keeps going while he stands on a slide tile and the next cell is walkable, and stops early on any
+## cell [param stop_at] accepts (a hole: its warp takes over). Pure: the puzzle solver uses it too.
+func slide_path(start: Vector3i, dir: Vector2i, slide_tiles: Array[StringName], stop_at: Callable = Callable()) -> Array[Vector3i]:
+	var out: Array[Vector3i] = []
+	var c := start
+	while true:
+		var n := Vector3i(c.x + dir.x, c.y + dir.y, c.z)
+		if not is_walkable(n):
+			break
+		out.append(n)
+		c = n
+		if stop_at.is_valid() and bool(stop_at.call(n)):
+			break
+		if not is_tile_in(n, slide_tiles):
+			break
+		if out.size() > width * height:
+			break
+	return out
+
+
+## Is [param cell] one of [param tiles] (a travel move's water, say)?
+func is_tile_in(cell: Vector3i, tiles: Array[StringName]) -> bool:
+	return in_bounds(cell) and tiles.has(_tile_ids[_i(cell)])
 
 
 func blocker_at(cell: Vector3i) -> String:

@@ -9,8 +9,8 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"undead"
-element = &"dark"
-display_name = "Undead"
+element = &"grim"
+display_name = "Rotwight"
 description = "A husk dragged back from the other side, its own will long gone. It remembers nothing but the shape of the living and the urge to claw at them."
 model_scene = ExtResource("2_model")
 base_health = 40
@@ -24,3 +24,5 @@ attack_range = 1
 movement_profile = ExtResource("5_mvprof")
 model_yaw_deg = 180.0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_strike")])
+; owner 2026-10-12: Rotwight is ENEMY-ONLY -- never playable or catchable; it only appears when Mortis raises it (Undying Legion / Reanimate / SummonEffect).
+catch_rate = 0.0

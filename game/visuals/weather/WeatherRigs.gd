@@ -30,6 +30,8 @@ static func build(kind: StringName) -> Node3D:
 			return _sand()
 		&"bloom":
 			return _bloom()
+		&"snow":
+			return _snow()
 	return null
 
 
@@ -134,6 +136,44 @@ static func _sand() -> Node3D:
 	drift.gravity = Vector3.ZERO
 	drift.color_ramp = _pulse_ramp(Color(1, 1, 1, 1))
 	_set_box(rig, drift, Vector3(0.7, 0.3, 0.7), GROUND_Y + 0.4)
+	return rig
+
+
+# --- Blizzard ----------------------------------------------------------------
+
+static func _snow() -> Node3D:
+	var rig := _rig("SnowRig")
+	# Flakes driven slant-wise by the wind, tumbling as they fall.
+	var flakes := _layer(rig, "Flakes", 2200, Vector2(0.16, 0.16), soft_dot_texture(0.35), Color(1.0, 1.0, 1.0), 0.95, false)
+	flakes.lifetime = 2.6
+	flakes.direction = Vector3(0.7, -1.0, 0.25)
+	flakes.spread = 14.0
+	flakes.initial_velocity_min = 6.0
+	flakes.initial_velocity_max = 10.0
+	flakes.gravity = Vector3(0, -1.5, 0)
+	flakes.scale_amount_min = 0.6
+	flakes.scale_amount_max = 1.4
+	_set_box(rig, flakes, Vector3(0.8, 4.0, 0.8), 9.0)
+	# Gusts: big soft white sheets blowing across the field.
+	var gusts := _layer(rig, "Gusts", 70, Vector2(10.0, 4.0), soft_dot_texture(), Color(0.92, 0.95, 1.0), 0.32, false)
+	gusts.lifetime = 6.0
+	gusts.direction = Vector3(1.0, 0.0, 0.25)
+	gusts.spread = 8.0
+	gusts.initial_velocity_min = 6.0
+	gusts.initial_velocity_max = 9.0
+	gusts.gravity = Vector3.ZERO
+	gusts.color_ramp = _pulse_ramp(Color(1, 1, 1, 1))
+	_set_box(rig, gusts, Vector3(0.8, 2.0, 0.8), 2.0)
+	# Low drift hugging the ground.
+	var drift := _layer(rig, "Drift", 260, Vector2(1.4, 0.3), soft_dot_texture(), Color(0.95, 0.97, 1.0), 0.4, false)
+	drift.lifetime = 2.4
+	drift.direction = Vector3(1.0, 0.02, 0.2)
+	drift.spread = 5.0
+	drift.initial_velocity_min = 6.0
+	drift.initial_velocity_max = 9.0
+	drift.gravity = Vector3.ZERO
+	drift.color_ramp = _pulse_ramp(Color(1, 1, 1, 1))
+	_set_box(rig, drift, Vector3(0.7, 0.3, 0.7), GROUND_Y + 0.35)
 	return rig
 
 

@@ -5,6 +5,8 @@ extends GutTest
 ## member context; open modes have no levels, so there it is unmet (fails closed). Growth edges are
 ## untouched.
 
+const EvoFixture := preload("res://tests/helpers/evolution_fixture.gd")
+
 
 func _trigger(n: int) -> LevelTrigger:
 	var t := LevelTrigger.new()
@@ -16,7 +18,7 @@ func _edge(triggers: Array) -> EvolutionResource:
 	var e := EvolutionResource.new()
 	e.id = &"test__level"
 	e.from_id = &"tree_grunt"
-	e.to_id = &"oakheart"
+	e.to_id = &"petalfang"
 	var typed: Array[EvolutionTrigger] = []
 	for t in triggers:
 		typed.append(t)
@@ -61,18 +63,23 @@ func test_answers_battle_events_and_validates_the_cap() -> void:
 	assert_ne(_trigger(999).problem(), "", "a level above the cap is a content problem")
 
 
-func test_shipped_growth_edge_is_unchanged() -> void:
-	var e: EvolutionResource = null
-	for edge in EvolutionLibrary.all():
-		if edge.id == &"tree_grunt__oakheart":
-			e = edge
-	assert_not_null(e, "the shipped Barkling -> Oakheart edge exists")
+func test_the_shipped_item_edge_has_no_level_trigger() -> void:
+	var e: EvolutionResource = EvolutionLibrary.get_edge(&"tree_grunt__ember_stump")
+	assert_not_null(e, "the shipped Barkling -> Cinderbark (Sunstone) edge exists")
 	if e == null:
 		return
 	var has_level: bool = false
-	var has_growth: bool = false
+	var has_use: bool = false
 	for t in e.triggers:
 		has_level = has_level or t is LevelTrigger
-		has_growth = has_growth or t is GrowthTrigger
-	assert_false(has_level, "no existing edge was migrated to a level trigger")
-	assert_true(has_growth, "it still evolves by Growth")
+		has_use = has_use or t is UseItemTrigger
+	assert_false(has_level, "the item edge was not migrated to a level trigger")
+	assert_true(has_use, "it still evolves by using the Sunstone")
+
+
+func test_growth_edges_never_need_a_level() -> void:
+	var e: EvolutionResource = EvoFixture.build()   # Growth 3 + 2 wins, no level
+	for t in e.triggers:
+		assert_false(t is LevelTrigger, "a Growth edge carries no level trigger")
+	assert_true(e.is_available({"growth": 3, "feats": {"wins": 2}}),
+		"an open-mode context with no level at all still evolves by Growth + wins")

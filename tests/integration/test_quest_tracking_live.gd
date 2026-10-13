@@ -188,7 +188,7 @@ func test_world_map_markers_states_and_navigation() -> void:
 	assert_eq(String(here["kind"]), "city")
 	assert_true(bool(map.marker_info("river_crossing")["rest"]), "the Wayshrine")
 	assert_false(bool(map.marker_info("river_crossing")["visited"]), "...not visited yet")
-	assert_true(bool(map.marker_info("frostpeak_village")["closed"]), "a closed road")
+	assert_true(bool(map.marker_info("mountain_base")["closed"]), "a closed road")
 	assert_false((map.marker_info("crownhaven")["quests"] as Array).is_empty(), "quests point at the capital")
 	assert_eq(map.selected_id(), "crownhaven", "the selection starts where you are")
 	var name_l: Label = map.card().find_child("PlaceName", true, false)

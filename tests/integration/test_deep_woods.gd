@@ -19,6 +19,8 @@ const BAND := Vector2i(8, 15)
 const DEPTHS := "depths_of_the_wood"
 const HEART := "depths_of_the_wood_heart"
 const VILLAGE := "deepwood_village"
+## Where the wrong ways lead (DECISIONS.md #101).
+const THICKET := "depths_of_the_wood_lost"
 ## The maze, in order, and each room's right exit.
 const ROOMS: Array[String] = ["depths_of_the_wood", "depths_of_the_wood_2", "depths_of_the_wood_3", "depths_of_the_wood_4"]
 const EXIT_IDS: Array[String] = ["north_exit", "south_exit", "west_exit", "east_exit"]
@@ -217,7 +219,7 @@ func test_winning_against_nyra_teaches_the_move() -> void:
 		s.set_flag(f, 1)
 	# The "already beaten" branch: talk to her -> she teaches.
 	await StoryScriptRunner.run_list(nyra.on_interact, ScriptContext.new(s, host, session, VILLAGE))
-	assert_true(s.member("vineweave").knows_field_move("treefell"), "the picked member learned it")
+	assert_true(s.member("seedant").knows_field_move("treefell"), "the picked member learned it")
 	assert_false(s.hero_member().knows_field_move("treefell"), "only that one")
 	assert_true(s.has_flag("deepwood.treefell_learned"), "the quest's learned flag")
 	# Later: she teaches it to another eligible member.
@@ -340,8 +342,8 @@ func test_the_maze_rooms_chain_and_the_wrong_ways_lead_back_to_the_entrance() ->
 			if w == null or w == right or w == south:
 				continue
 			wrong += 1
-			assert_eq(String(w.target_area), ROOMS[0], "%s/%s: a wrong way leads back to the entrance" % [id, eid])
-			assert_eq(w.target_entry, &"south", "to its start")
+			assert_eq(String(w.target_area), THICKET, "%s/%s: a wrong way leads into the tangled thicket (#101)" % [id, eid])
+			assert_eq(w.target_entry, &"south", "at its south edge")
 			assert_false(w.arrival_toast.is_empty(), "with a short toast")
 			assert_true(w.requires.is_empty(), "never locked")
 		assert_eq(wrong, 2, "%s: two wrong ways" % id)
@@ -350,53 +352,56 @@ func test_the_maze_rooms_chain_and_the_wrong_ways_lead_back_to_the_entrance() ->
 	assert_eq(String(_warp(HEART, "south_exit").target_area), ROOMS[ROOMS.size() - 1])
 
 
-func test_lit_lanterns_mark_the_right_exit_in_every_room() -> void:
-	# Every CHOICE exit (north / west / east) has a pair of lantern posts at its mouth, so the exits
-	# look alike; only the RIGHT one's are lit (PropEntity.glow), the wrong ones stay dark.
+func test_deep_roots_and_great_trees_mark_the_right_exit_in_every_room() -> void:
+	# DECISIONS.md #101: "deeper roots and thicker trees indicate the correct path". The RIGHT exit's
+	# mouth is flanked by two great trees and great roots run along its corridor; the wrong exits are plain.
 	for i in range(ROOMS.size()):
 		var a := _area(ROOMS[i])
 		var right := _right_exit(i)
 		var exit_cell: Vector3i = right.cells()[0]
-		var lit: Array = []
-		var dark: Array = []
+		var trees: Array = []
+		var roots: Array = []
 		for e in a.entity_list():
-			if e is PropEntity and String(e.id).begins_with("light_"):
-				if (e as PropEntity).glow > 0.0:
-					lit.append(e)
-				else:
-					dark.append(e)
-		assert_eq(lit.size(), 2, "%s: a pair of LIT lanterns" % ROOMS[i])
-		assert_eq(dark.size(), 4, "%s: dark pairs at the two wrong exits" % ROOMS[i])
-		for l in lit:
-			var d: Vector3i = (l as PropEntity).cell - exit_cell
-			assert_lte(absi(d.x) + absi(d.y), 3, "%s/%s stands at the right exit's mouth" % [ROOMS[i], l.id])
-		for l in dark:
-			var d: Vector3i = (l as PropEntity).cell - exit_cell
-			assert_gt(absi(d.x) + absi(d.y), 3, "%s/%s (dark) is not at the right exit" % [ROOMS[i], l.id])
-		# ... and fireflies over the right corridor's ground (sacred meadow), never at a wrong exit.
+			if e is PropEntity and (e as PropEntity).prop == "great_tree":
+				trees.append(e)
+			elif e is PropEntity and (e as PropEntity).prop == "roots":
+				roots.append(e)
+		assert_eq(trees.size(), 2, "%s: two great trees" % ROOMS[i])
+		for tr in trees:
+			var d: Vector3i = (tr as PropEntity).cell - exit_cell
+			assert_lte(absi(d.x) + absi(d.y), 3, "%s/%s stands at the right exit's mouth" % [ROOMS[i], tr.id])
+			assert_true((tr as PropEntity).is_blocking(), "a great tree is solid")
+		assert_gte(roots.size(), 3, "%s: roots along the right way" % ROOMS[i])
+		var root_cells: Dictionary = {}
+		for r in roots:
+			root_cells[(r as PropEntity).cell] = true
+			assert_false((r as PropEntity).is_blocking(), "roots are walked over")
+		assert_true(root_cells.has(exit_cell), "%s: the roots run out to the right exit" % ROOMS[i])
 		for eid in EXIT_IDS:
 			var w := _warp(ROOMS[i], eid)
-			var tid: String = String(a.terrain.get_tile_at_position(Vector2i(w.cells()[0].x, w.cells()[0].y)).get("tile_id", ""))
-			if w == right:
-				assert_eq(tid, "sacred_meadow", "%s: the right way glows" % ROOMS[i])
-			else:
-				assert_ne(tid, "sacred_meadow", "%s/%s: a wrong way does not" % [ROOMS[i], eid])
+			if w != right and String(w.target_area) == THICKET:
+				assert_false(root_cells.has(w.cells()[0]), "%s/%s: no roots at a wrong way" % [ROOMS[i], eid])
 
 
-func test_a_lit_lantern_gets_a_glowing_head_and_a_light() -> void:
-	var n: Node3D = OverworldProps.prop("lamp", Vector2i.ONE, Color(0.85, 1.0, 0.55), 0)
-	assert_null(n.find_child("Glow", true, false), "an unlit lantern has no light")
-	OverworldProps.add_glow(n, "lamp", Color(0.85, 1.0, 0.55), 2.4)
-	var light := n.find_child("Glow", true, false) as OmniLight3D
-	assert_not_null(light, "a lit one does")
-	if light != null:
-		assert_almost_eq(light.light_energy, 2.4, 0.001)
-		assert_gt(light.position.y, 2.0, "at the lantern head")
-	var head := n.find_child("GlowHead", true, false) as MeshInstance3D
-	assert_not_null(head, "and an emissive head")
-	if head != null:
-		assert_true((head.material_override as StandardMaterial3D).emission_enabled)
-	n.free()
+func test_a_wrong_way_leads_through_a_thicket_of_tough_creatures_back_to_the_start() -> void:
+	# DECISIONS.md #101: "wrong path followed equals tough battles, multiple enemy encounters".
+	var t := _area(THICKET)
+	assert_not_null(t, "the tangled thicket ships")
+	assert_eq(t.display_name, "Depths of the Wood", "it looks like any other room")
+	var exits: int = 0
+	for e in t.entity_list():
+		if e is WarpEntity:
+			exits += 1
+			assert_eq(String((e as WarpEntity).target_area), ROOMS[0], "%s: back to the maze's entrance" % e.id)
+			assert_false((e as WarpEntity).arrival_toast.is_empty(), "with a toast")
+	assert_eq(exits, 4, "every way out")
+	var zones: Array[EncounterZone] = t.zones()
+	assert_eq(zones.size(), 1, "one zone")
+	var z: EncounterZone = zones[0]
+	assert_true(z.is_hidden_mode(), "frequent hidden rolls")
+	assert_gt(z.rate, 0.12, "more often than the maze's grass")
+	assert_true(z.tile_ids.has(&"forest_dirt"), "even on the paths: multiple encounters")
+	assert_eq(z.band_in(t).x, 14, "at the top of the Deep Woods band")
 
 
 func test_each_room_is_enclosed_by_forest() -> void:

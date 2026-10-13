@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterResource" format=3]
+
+[ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
+[ext_resource type="PackedScene" path="res://game/characters/models/fire/lava_komodo_forge.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_char")
+character_id = &"lava_komodo"
+element = &"fire"
+display_name = "Magmodo"
+description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Magmoo pending rebalance; no moves or abilities yet."
+model_scene = ExtResource("2_model")
+; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/lava_komodo.glb @ 586f2ce): PLACEHOLDER FOR REBALANCE. Stats cloned from magmoo.tres (Magmoo, the fire beast; element fire (lava lizard of volcanic rock)); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): lava_komodo_forge.glb.import root_scale 0.39147 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-11: 4 ft 3 in = 1.2954 m) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
+base_health = 55
+base_attack = 14
+base_defense = 8
+base_magic = 2
+base_magic_defense = 6
+base_speed = 7
+base_movement = 3
+attack_range = 1
+model_scale = 0.71648
