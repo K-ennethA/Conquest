@@ -45,6 +45,42 @@ const STATUS_READY := "ready"
 @export var used_text: String = "{user} used {move}!"
 ## The toast when a member learns it. {user} = who learned it, {move} = the name.
 @export var learned_text: String = "{user} learned {move}!"
+## A TRAVEL move (the sea move, #43): the tiles a member who knows it carries the hero over --
+## face one of them, Confirm, "Use {move}?" -> the hero rides out onto it, and steps off onto any
+## land. Empty = an OBSTACLE move (the tree-felling kind, cleared through [FieldObstacleEntity]).
+@export var travel_tiles: Array[StringName] = []
+## The HUD prompt chip when the hero faces a travel tile and the move is ready.
+@export var travel_verb: String = "Ride"
+
+
+## Every shipped TRAVEL move ([member travel_tiles] set), in file order.
+static func travel_moves() -> Array[FieldMoveResource]:
+	var out: Array[FieldMoveResource] = []
+	var dir := DirAccess.open(DIR)
+	if dir == null:
+		return out
+	var files: PackedStringArray = dir.get_files()
+	files.sort()
+	for f in files:
+		var fname: String = f.trim_suffix(".remap")
+		if not fname.ends_with(".tres"):
+			continue
+		var fm := load(DIR + fname) as FieldMoveResource
+		if fm != null and fm.is_travel():
+			out.append(fm)
+	return out
+
+
+## The shipped travel move that crosses tile [param tile_id], or null.
+static func travel_move_for(tile_id: StringName) -> FieldMoveResource:
+	for fm in travel_moves():
+		if fm.travel_tiles.has(tile_id):
+			return fm
+	return null
+
+
+func is_travel() -> bool:
+	return not travel_tiles.is_empty()
 
 
 ## The shipped move [param move_id] (trusted content), or null.
@@ -178,3 +214,6 @@ func validate(issues: Array[String]) -> void:
 			issues.append("%s: '%s' is listed as a human but is a creature" % [where, h])
 	if locked_hint.strip_edges().is_empty() or no_user_hint.strip_edges().is_empty():
 		issues.append("%s: needs a locked hint and a no-user hint" % where)
+	for t in travel_tiles:
+		if TileCatalog.find_by_id(t) == null:
+			issues.append("%s: travel tile '%s' does not exist" % [where, t])

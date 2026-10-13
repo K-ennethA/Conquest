@@ -73,6 +73,9 @@ func test_every_status_has_an_entry_with_a_description() -> void:
 func test_every_roster_unit_lists_all_moves_and_abilities() -> void:
 	var ids := _ids(CompendiumData.SECTION_UNITS)
 	for cid in CharacterLibrary.all_ids():
+		if String(cid) in CompendiumData.NOT_IN_COMPENDIUM:
+			assert_false(String(cid) in ids, "%s is not a creature or person, so it has no page" % cid)
+			continue
 		var c := CharacterLibrary.get_character(cid)
 		assert_true(String(c.character_id) in ids, "unit %s listed" % cid)
 		var text := _entry_text(CompendiumData.find(CompendiumData.SECTION_UNITS, String(c.character_id)))

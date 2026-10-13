@@ -1,0 +1,88 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_suo6f"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_kglbb"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="3_54hbn"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="4_hl3u1"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="5_kntjy"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/hidden_depths_2/terrain.tres" id="6_pmcwu"]
+
+[sub_resource type="Resource" id="Resource_tqqjj"]
+script = ExtResource("2_kglbb")
+character_id = &"gem_knight"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_hg5rv"]
+script = ExtResource("2_kglbb")
+character_id = &"monster"
+weight = 1.5
+
+[sub_resource type="Resource" id="Resource_2qa57"]
+script = ExtResource("1_suo6f")
+table = Array[Resource]([SubResource("Resource_tqqjj"), SubResource("Resource_hg5rv")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_717i8"]
+script = ExtResource("3_54hbn")
+prop = "crystal"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"hd1_crystal_11_4"
+cell = Vector3i(11, 4, 0)
+tint = Color(0.55, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Resource_vkk4v"]
+script = ExtResource("3_54hbn")
+prop = "crystal"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"hd1_crystal_12_7"
+cell = Vector3i(12, 7, 0)
+tint = Color(0.55, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Resource_t46xp"]
+script = ExtResource("3_54hbn")
+prop = "crystal"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"hd1_crystal_11_11"
+cell = Vector3i(11, 11, 0)
+tint = Color(0.55, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Resource_bhvl7"]
+script = ExtResource("4_hl3u1")
+area_rect = Rect2i(10, 15, 1, 1)
+target_area = &"hidden_depths"
+target_entry = &"north"
+id = &"south_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_s8axc"]
+script = ExtResource("4_hl3u1")
+area_rect = Rect2i(10, 0, 1, 1)
+target_area = &"hidden_depths_3"
+target_entry = &"south"
+id = &"north_exit"
+blocking = false
+
+[resource]
+script = ExtResource("5_kntjy")
+area_id = &"hidden_depths_2"
+display_name = "Hidden Depths"
+terrain = ExtResource("6_pmcwu")
+kind = 3
+region_id = &"northern_mountains"
+world_map_pos = Vector2(0.85, 0.137)
+entry_points = {
+"north": {
+"cell": [10, 1, 0],
+"facing": "south"
+},
+"south": {
+"cell": [10, 14, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_717i8"), SubResource("Resource_vkk4v"), SubResource("Resource_t46xp"), SubResource("Resource_bhvl7"), SubResource("Resource_s8axc")])
+encounter_zones = Array[Resource]([SubResource("Resource_2qa57")])
+level_band = Vector2i(25, 35)

@@ -8,6 +8,7 @@ uniform float sun_amt = 0.0;
 uniform float rain_amt = 0.0;
 uniform float sand_amt = 0.0;
 uniform float bloom_amt = 0.0;
+uniform float snow_amt = 0.0;
 uniform vec2 sun_pos = vec2(0.30, -0.12);
 uniform float aspect = 1.7778;
 
@@ -87,6 +88,17 @@ void fragment() {
 		float shimmer = 0.5 + 0.5 * sin(TIME * 0.6 + uv.x * 3.0 + uv.y * 2.0);
 		vec3 pastel = mix(vec3(1.0, 0.62, 0.85), vec3(1.0, 0.9, 0.55), uv.y + 0.2 * shimmer);
 		add_rgb += pastel * edge * 0.16 * bloom_amt;
+	}
+
+	// --- Blizzard: a cold white-out, thick at the edges, gusting across the screen.
+	if (snow_amt > 0.001) {
+		vec2 c = uv - 0.5;
+		c.x *= aspect;
+		float vig = smoothstep(0.35, 1.2, length(c));
+		float gust = fbm(vec2(uv.x * 2.5 - TIME * 0.6, uv.y * 2.0 + TIME * 0.1));
+		float a = (0.08 + vig * 0.32 + gust * 0.12) * snow_amt;
+		vec3 white = vec3(0.9, 0.93, 1.0);
+		mix_col = vec4(mix(mix_col.rgb, white, a / max(a + mix_col.a, 0.001)), clamp(mix_col.a + a, 0.0, 0.7));
 	}
 
 	// Composite (premultiplied): out = rgb + dst * (1 - a). The haze/tint part is a

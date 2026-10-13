@@ -13,20 +13,16 @@ const Doubles := preload("res://tests/helpers/test_doubles.gd")
 
 const CHART_PATH: String = "res://game/combat/resources/element_chart.tres"
 
-## Every element in the shipped vocabulary.
+## Every type in the shipped vocabulary (owner, 2026-10-12: the 15 types).
 const ALL: Array[StringName] = [
-	&"fire", &"water", &"nature", &"wind", &"earth", &"holy", &"dark",
-]
-
-## The seeded OPPOSITE pairs. Strong in BOTH directions, authored per direction.
-const OPPOSITES: Array = [
-	[&"fire", &"nature"],
-	[&"water", &"earth"],
-	[&"holy", &"dark"],
+	&"basic", &"martial", &"fire", &"water", &"plant", &"bug", &"electric", &"ice",
+	&"wind", &"earth", &"metal", &"poison", &"radiant", &"grim", &"dragon",
 ]
 
 const SELF_RESIST: float = 0.75
 const OPPOSITE_STRONG: float = 1.25
+const STRONG: float = 1.25
+const RESISTED: float = 0.75
 
 
 ## The chart is a static cache, which makes it GLOBAL state -- restored here rather than
@@ -46,69 +42,93 @@ func test_the_shipped_chart_resource_loads() -> void:
 	assert_true(chart is ElementChartResource,
 		"ElementChart.chart() hands back the authored resource, not a stand-in")
 	assert_eq(chart.elements.size(), ALL.size(),
-		"the authored vocabulary is the seven elements moves and characters use")
+		"the authored vocabulary is the owner's fifteen types")
 	for element in ALL:
 		assert_true(chart.has_element(element),
 			"%s is part of the authored element vocabulary" % element)
 
 
 func test_the_resource_documents_what_it_seeded() -> void:
-	# The seeded pairs are a design decision someone will want to revisit. The record of
-	# WHY lives in the resource as data (a `;` comment would be stripped when the editor
-	# re-saves the file), so it cannot drift away from the numbers it explains.
+	# The chart is a design decision someone will want to revisit. The record of WHY lives in
+	# the resource as data (a semicolon comment would be stripped when the editor re-saves the file).
 	assert_ne(ElementChart.chart().notes.strip_edges(), "",
 		"the chart resource carries its own authoring notes")
 
 
-func test_exactly_the_seeded_pairs_are_non_neutral() -> void:
-	# 7 self-resists + 3 opposite pairs x 2 directions = 13. A fourteenth entry means
-	# someone added a matchup without adding it to this list -- which is fine, but it is
-	# a balance decision and it should be a deliberate edit here too.
-	assert_eq(ElementChart.chart().authored_pairs().size(), 13,
-		"the seeded chart authors 7 self-resists and 6 opposite-pair directions")
+# --- The owner's calls (2026-10-12) ------------------------------------------
 
 
-# --- Rule 1: every element resists itself ------------------------------------
+func test_the_classic_triangle() -> void:
+	assert_almost_eq(ElementChart.multiplier(&"fire", &"plant"), STRONG, 0.001, "fire burns plant")
+	assert_almost_eq(ElementChart.multiplier(&"water", &"fire"), STRONG, 0.001, "water douses fire")
+	assert_almost_eq(ElementChart.multiplier(&"plant", &"water"), STRONG, 0.001, "plant drinks water")
+	assert_almost_eq(ElementChart.multiplier(&"fire", &"water"), RESISTED, 0.001, "and back the other way it is resisted")
 
 
-func test_every_element_resists_itself() -> void:
-	for element in ALL:
+func test_the_owner_calls_beyond_the_obvious() -> void:
+	assert_almost_eq(ElementChart.multiplier(&"earth", &"metal"), STRONG, 0.001, "earth beats metal")
+	assert_almost_eq(ElementChart.multiplier(&"metal", &"dragon"), STRONG, 0.001, "metal beats dragon -- the knight's tale")
+	assert_almost_eq(ElementChart.multiplier(&"radiant", &"metal"), RESISTED, 0.001, "metal RESISTS radiant")
+	assert_almost_eq(ElementChart.multiplier(&"metal", &"radiant"), 1.0, 0.001, "but does not beat it")
+	assert_almost_eq(ElementChart.multiplier(&"poison", &"radiant"), RESISTED, 0.001, "radiant is too pure for poison")
+	assert_almost_eq(ElementChart.multiplier(&"bug", &"radiant"), STRONG, 0.001, "bug beats radiant")
+	assert_almost_eq(ElementChart.multiplier(&"martial", &"basic"), STRONG, 0.001, "martial beats basic")
+	assert_almost_eq(ElementChart.multiplier(&"basic", &"grim"), RESISTED, 0.001, "grim shrugs off basic blows")
+
+
+func test_most_types_resist_themselves() -> void:
+	for element in [&"martial", &"fire", &"water", &"plant", &"bug", &"electric", &"ice", &"wind", &"earth", &"metal", &"poison", &"radiant"]:
 		assert_almost_eq(ElementChart.multiplier(element, element), SELF_RESIST, 0.001,
-			"%s is hardest to hurt with its own element" % element)
+			"%s is hardest to hurt with its own type" % element)
+	assert_almost_eq(ElementChart.multiplier(&"grim", &"grim"), STRONG, 0.001, "spirits harm spirits")
+	assert_almost_eq(ElementChart.multiplier(&"dragon", &"dragon"), STRONG, 0.001, "dragons are each other's bane")
+	assert_almost_eq(ElementChart.multiplier(&"basic", &"basic"), 1.0, 0.001, "basic is plain against basic")
 
 
-# --- Rule 2: opposite pairs are strong BOTH ways -----------------------------
+# --- Two types: the step rule ------------------------------------------------
 
 
-func test_opposite_pairs_are_strong_in_both_directions() -> void:
-	for pair in OPPOSITES:
-		var a: StringName = pair[0]
-		var b: StringName = pair[1]
-		assert_almost_eq(ElementChart.multiplier(a, b), OPPOSITE_STRONG, 0.001,
-			"%s strikes its opposite %s hard" % [a, b])
-		assert_almost_eq(ElementChart.multiplier(b, a), OPPOSITE_STRONG, 0.001,
-			"and %s strikes back just as hard -- opposition runs both ways" % b)
+func test_one_type_is_exactly_the_matrix() -> void:
+	assert_almost_eq(ElementChart.multiplier_vs(&"fire", [&"plant"]), STRONG, 0.001, "one type reads the matrix")
+	assert_almost_eq(ElementChart.multiplier_vs(&"fire", [&"plant", &"plant"]), STRONG, 0.001, "a repeated type counts once")
+	assert_almost_eq(ElementChart.multiplier_vs(&"fire", []), 1.0, 0.001, "no type at all is neutral")
 
 
-func test_wind_is_deliberately_unpaired() -> void:
-	# Wind is the one element with NO content at all, so it was left without an opposite
-	# rather than given an invented one. It still resists itself.
-	for element in ALL:
-		if element == &"wind":
-			continue
-		assert_almost_eq(ElementChart.multiplier(&"wind", element), 1.0, 0.001,
-			"wind has no authored matchup into %s yet" % element)
-		assert_almost_eq(ElementChart.multiplier(element, &"wind"), 1.0, 0.001,
-			"and nothing has an authored matchup into wind yet")
+func test_two_weaknesses_stack_to_one_and_a_half() -> void:
+	# fire beats plant AND bug.
+	assert_almost_eq(ElementChart.multiplier_vs(&"fire", [&"plant", &"bug"]), 1.5, 0.001, "weak to both: x1.5")
+
+
+func test_a_weakness_and_a_resist_cancel() -> void:
+	# fire beats plant; water resists fire's... fire into water is resisted.
+	assert_almost_eq(ElementChart.multiplier_vs(&"fire", [&"plant", &"water"]), 1.0, 0.001, "they cancel exactly")
+
+
+func test_two_resists_stack_to_a_half() -> void:
+	# poison is resisted by earth AND metal.
+	assert_almost_eq(ElementChart.multiplier_vs(&"poison", [&"earth", &"metal"]), 0.5, 0.001, "resists both: x0.5")
+
+
+func test_a_neutral_second_type_changes_nothing() -> void:
+	assert_almost_eq(ElementChart.multiplier_vs(&"fire", [&"plant", &"wind"]), STRONG, 0.001, "wind adds nothing against fire")
+
+
+func test_a_unit_with_two_types_is_read_both_ways() -> void:
+	var unit := _ElementUnit.new(&"plant")
+	unit.element2 = &"bug"
+	assert_eq(ElementChart.elements_of(unit), [&"plant", &"bug"] as Array[StringName], "both types, primary first")
+	var move := MoveResource.new()
+	move.element = &"fire"
+	assert_almost_eq(ElementChart.damage_scale_for(move, unit, null), 1.5, 0.001, "a fire move hits a plant/bug for x1.5")
 
 
 # --- Unknown pairs are neutral, never an error -------------------------------
 
 
 func test_an_unauthored_pair_is_neutral() -> void:
-	assert_almost_eq(ElementChart.multiplier(&"fire", &"holy"), 1.0, 0.001,
-		"fire and holy are not opposites and not the same -- no matchup either way")
-	assert_almost_eq(ElementChart.multiplier(&"dark", &"earth"), 1.0, 0.001,
+	assert_almost_eq(ElementChart.multiplier(&"fire", &"radiant"), 1.0, 0.001,
+		"fire and radiant have no matchup either way")
+	assert_almost_eq(ElementChart.multiplier(&"grim", &"earth"), 1.0, 0.001,
 		"an unlisted pairing is neutral, not a missing-data failure")
 
 
@@ -137,7 +157,7 @@ func test_garbage_element_names_are_quiet() -> void:
 
 
 func test_a_plain_string_looks_up_the_same_as_a_stringname() -> void:
-	assert_almost_eq(ElementChart.multiplier("fire", "nature"), OPPOSITE_STRONG, 0.001,
+	assert_almost_eq(ElementChart.multiplier("fire", "plant"), OPPOSITE_STRONG, 0.001,
 		"a String element name resolves identically to a StringName one")
 
 
@@ -175,11 +195,11 @@ func test_an_injected_chart_replaces_the_shipped_one() -> void:
 
 	assert_almost_eq(ElementChart.multiplier(&"steam", &"fire"), 2.0, 0.001,
 		"the chart is DATA -- swapping the resource retunes every matchup at once")
-	assert_almost_eq(ElementChart.multiplier(&"fire", &"nature"), 1.0, 0.001,
+	assert_almost_eq(ElementChart.multiplier(&"fire", &"plant"), 1.0, 0.001,
 		"and the shipped pairs are gone with it, proving nothing is hard-coded")
 
 	ElementChart.reset_chart()
-	assert_almost_eq(ElementChart.multiplier(&"fire", &"nature"), OPPOSITE_STRONG, 0.001,
+	assert_almost_eq(ElementChart.multiplier(&"fire", &"plant"), OPPOSITE_STRONG, 0.001,
 		"resetting goes back to the authored .tres")
 
 
@@ -193,11 +213,11 @@ func test_a_mis_authored_default_cannot_erase_damage() -> void:
 
 func test_a_mis_authored_matrix_entry_falls_back_to_neutral() -> void:
 	var broken := ElementChartResource.new()
-	broken.matrix = { &"fire": { &"water": "very effective", &"nature": -3.0 } }
+	broken.matrix = { &"fire": { &"water": "very effective", &"plant": -3.0 } }
 	ElementChart.set_chart(broken)
 	assert_almost_eq(ElementChart.multiplier(&"fire", &"water"), 1.0, 0.001,
 		"a non-numeric multiplier is neutral, quietly")
-	assert_almost_eq(ElementChart.multiplier(&"fire", &"nature"), 1.0, 0.001,
+	assert_almost_eq(ElementChart.multiplier(&"fire", &"plant"), 1.0, 0.001,
 		"a negative multiplier is neutral -- damage can never invert into healing")
 
 
@@ -210,8 +230,8 @@ func test_move_and_unit_elements_are_read_duck_typed() -> void:
 	assert_eq(ElementChart.move_element(move), &"fire", "a move's element is its own field")
 	assert_eq(ElementChart.move_element(null), &"", "a null move carries no element")
 
-	var unit := _ElementUnit.new(&"nature")
-	assert_eq(ElementChart.element_of(unit), &"nature",
+	var unit := _ElementUnit.new(&"plant")
+	assert_eq(ElementChart.element_of(unit), &"plant",
 		"a unit's element comes from get_element()")
 	assert_eq(ElementChart.element_of(null), &"", "a null unit carries no element")
 	assert_eq(ElementChart.element_of(Doubles.CombatUnit.new(0, {})), &"",
@@ -223,7 +243,7 @@ func test_move_and_unit_elements_are_read_duck_typed() -> void:
 
 func test_damage_scale_is_a_no_op_without_elements() -> void:
 	var move := MoveResource.new()  # element unset
-	var target := _ElementUnit.new(&"nature")
+	var target := _ElementUnit.new(&"plant")
 	assert_almost_eq(ElementChart.damage_scale_for(move, target, null), 1.0, 0.001,
 		"an unelemented MOVE scales nothing, so pre-element content is unchanged")
 
@@ -236,7 +256,7 @@ func test_damage_scale_applies_the_matchup() -> void:
 	var move := MoveResource.new()
 	move.element = &"fire"
 	assert_almost_eq(
-		ElementChart.damage_scale_for(move, _ElementUnit.new(&"nature"), null),
+		ElementChart.damage_scale_for(move, _ElementUnit.new(&"plant"), null),
 		OPPOSITE_STRONG, 0.001, "fire into its opposite nature is strong")
 	assert_almost_eq(
 		ElementChart.damage_scale_for(move, _ElementUnit.new(&"fire"), null),
@@ -245,7 +265,7 @@ func test_damage_scale_applies_the_matchup() -> void:
 
 func test_a_matching_tile_amplifies_and_a_home_tile_protects() -> void:
 	var board := Doubles.TileEffectBoard.new()
-	var target := _ElementUnit.new(&"nature")
+	var target := _ElementUnit.new(&"plant")
 	board.place(target, Vector3i(1, 1, 0))
 	board.set_tile_effects(Vector3i(1, 1, 0), [_TileEffect.new(&"tall_grass")])
 
@@ -256,7 +276,7 @@ func test_a_matching_tile_amplifies_and_a_home_tile_protects() -> void:
 		"a nature unit at home on grass shaves the incoming matchup")
 
 	var nature := MoveResource.new()
-	nature.element = &"nature"
+	nature.element = &"plant"
 	# nature>nature 0.75, nature move matching the grass tile 1.25, home benefit 0.9.
 	assert_almost_eq(
 		ElementChart.damage_scale_for(nature, target, board), 0.75 * 1.25 * 0.9, 0.001,
@@ -265,7 +285,7 @@ func test_a_matching_tile_amplifies_and_a_home_tile_protects() -> void:
 
 func test_tile_elements_are_read_from_the_chart_resource() -> void:
 	var board := Doubles.TileEffectBoard.new()
-	var target := _ElementUnit.new(&"nature")
+	var target := _ElementUnit.new(&"plant")
 	board.place(target, Vector3i(0, 0, 0))
 	board.set_tile_effects(Vector3i(0, 0, 0), [_TileEffect.new(&"molten_lava"), null])
 	assert_eq(ElementChart.tile_elements_under(target, board), [&"fire"],
@@ -286,6 +306,7 @@ func test_tile_elements_are_read_from_the_chart_resource() -> void:
 ## The smallest thing that carries an element.
 class _ElementUnit:
 	var element: StringName
+	var element2: StringName = &""
 
 	func _init(p_element: StringName) -> void:
 		element = p_element

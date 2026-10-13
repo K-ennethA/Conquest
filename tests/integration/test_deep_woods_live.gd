@@ -127,7 +127,7 @@ func test_the_legend_board_fields_the_squad_lyra_and_a_fixed_level_eldroot() -> 
 	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.set_location("depths_of_the_wood_heart", Vector3i(9, 6, 0), "north")
-	s.member("vineweave").set_level(11)
+	s.member("seedant").set_level(11)
 	s.member("blightcap").set_level(9)
 	assert_not_null(s.join("lyra", "", 6, 10, true, "deepwood.eldroot_beaten")["member"], "Lyra joins after her challenge (temporary)")
 	var spec := _eldroot_spec()
@@ -186,7 +186,7 @@ func test_the_legend_board_fields_the_squad_lyra_and_a_fixed_level_eldroot() -> 
 
 
 func test_a_wrong_way_in_the_maze_turns_you_back_with_a_toast() -> void:
-	# DECISIONS.md #93: a WRONG exit warps back to the maze's entrance and hands the next overworld a
+	# DECISIONS.md #93 / #101: a WRONG exit warps into the tangled thicket and hands the next overworld a
 	# short toast (never a dialogue box); a right exit hands it nothing.
 	StoryController.new_journey(1)
 	StoryFixture.past_opening(StoryController.state())
@@ -196,12 +196,12 @@ func test_a_wrong_way_in_the_maze_turns_you_back_with_a_toast() -> void:
 	s.set_location("depths_of_the_wood_2", room.entry("south")["cell"], "north")
 	var wrong := room.entity("west_exit") as WarpEntity
 	var right := room.entity("east_exit") as WarpEntity
-	assert_eq(String(wrong.target_area), "depths_of_the_wood", "the west way is wrong in room 2")
+	assert_eq(String(wrong.target_area), "depths_of_the_wood_lost", "the west way is wrong in room 2")
 	var r: Dictionary = StoryController.warp_to(String(wrong.target_area), String(wrong.target_entry), wrong.cells()[0], wrong)
 	assert_true(bool(r["success"]), "the warp goes through")
-	assert_eq(s.location_area(), "depths_of_the_wood", "back at the entrance")
-	assert_eq(s.location_cell(), (load(StoryController.area_path("depths_of_the_wood")) as OverworldAreaResource).entry("south")["cell"],
-		"at its start")
+	assert_eq(s.location_area(), "depths_of_the_wood_lost", "into the thicket")
+	assert_eq(s.location_cell(), (load(StoryController.area_path("depths_of_the_wood_lost")) as OverworldAreaResource).entry("south")["cell"],
+		"at its south edge")
 	assert_eq(StoryController.take_arrival_toast(), wrong.arrival_toast, "the next overworld toasts it")
 	assert_eq(StoryController.take_arrival_toast(), "", "once")
 	s.set_location("depths_of_the_wood_2", room.entry("south")["cell"], "north")

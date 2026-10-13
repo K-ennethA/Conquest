@@ -6,7 +6,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"spectormn"
-element = &"dark"
+element = &"grim"
 display_name = "Spectormn"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Mortis pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")

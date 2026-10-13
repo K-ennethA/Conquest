@@ -275,7 +275,7 @@ func test_voidwalk_immunity_is_read_by_the_damage_layer_not_just_the_status():
 	assert_true(DamageMath.is_invulnerable(unit),
 		"the shared invulnerability test -- what the hit, the forecast and the AI all read")
 	assert_eq(DamageMath.environment_damage(unit, 99,
-		CombatTypes.DamageCategory.MAGICAL, &"dark", board), 0,
+		CombatTypes.DamageCategory.MAGICAL, &"grim", board), 0,
 		"and the environmental chain honours it too")
 
 

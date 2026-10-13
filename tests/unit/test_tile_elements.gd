@@ -36,16 +36,16 @@ const FORTIFY_TILE := "res://game/tiles/effects/resources/fortify.tres"
 const ASSIGNMENTS := {
 	FIRE_TILE: &"fire",
 	VENT_TILE: &"fire",
-	GRASS_TILE: &"nature",
-	VINE_TILE: &"nature",
-	ICE_TILE: &"water",
+	GRASS_TILE: &"plant",
+	VINE_TILE: &"plant",
+	ICE_TILE: &"ice",
 	WATER_TILE: &"water",
 	FORTIFY_TILE: &"earth",
 	RUBBLE_TILE: &"earth",
 	# NATURE, not holy, despite the name -- an authored design call: the meadow is a living
 	# place whose heal runs stronger for the nature creatures that belong in it. The .tres
 	# notes carry the reasoning.
-	MEADOW_TILE: &"nature",
+	MEADOW_TILE: &"plant",
 }
 
 
@@ -107,7 +107,7 @@ func test_a_tile_effect_carries_no_element_field_of_its_own() -> void:
 	assert_false("element" in names,
 		"TileEffectResource exposes no element PROPERTY -- element() is a chart lookup")
 	fresh.id = &"tall_grass"
-	assert_eq(fresh.element(), &"nature",
+	assert_eq(fresh.element(), &"plant",
 		"so an effect built in code inherits the map's answer purely from its id")
 
 
@@ -117,7 +117,7 @@ func test_an_unassigned_id_is_elementless_rather_than_an_error() -> void:
 	assert_eq(orphan.element(), &"",
 		"terrain nobody has elemented is elementless, quietly")
 	assert_almost_eq(ElementChart.environment_scale_for(orphan.element(),
-		_ElementUnit.new(&"nature", 100)), 1.0, 0.001,
+		_ElementUnit.new(&"plant", 100)), 1.0, 0.001,
 		"and an elementless tile scales its damage by exactly nothing")
 
 
@@ -134,10 +134,10 @@ func test_garbage_tile_effects_are_quiet() -> void:
 
 func test_a_cells_elements_are_read_in_effect_order_and_deduped() -> void:
 	assert_eq(ElementChart.tile_elements_of([_tile(GRASS_TILE), null, _tile(VINE_TILE)]),
-		[&"nature"],
+		[&"plant"],
 		"two nature effects on one cell contribute one element; a null is skipped")
 	assert_eq(ElementChart.tile_elements_of([_tile(FIRE_TILE), _tile(GRASS_TILE)]),
-		[&"fire", &"nature"],
+		[&"fire", &"plant"],
 		"a mixed cell reports both, base terrain first -- the cell's own order")
 	assert_eq(ElementChart.tile_elements_of("not an array"), [],
 		"anything that is not a list of effects contributes nothing, quietly")
@@ -145,9 +145,9 @@ func test_a_cells_elements_are_read_in_effect_order_and_deduped() -> void:
 
 func test_the_map_is_data_and_can_be_retuned_without_code() -> void:
 	var custom := ElementChartResource.new()
-	custom.tile_elements = { &"tall_grass": &"dark" }
+	custom.tile_elements = { &"tall_grass": &"grim" }
 	ElementChart.set_chart(custom)
-	assert_eq(_tile(GRASS_TILE).element(), &"dark",
+	assert_eq(_tile(GRASS_TILE).element(), &"grim",
 		"swapping the resource re-elements the terrain -- nothing is hard-coded")
 
 
@@ -157,7 +157,7 @@ func test_the_map_is_data_and_can_be_retuned_without_code() -> void:
 
 
 func test_a_fire_tile_burns_a_nature_occupant_harder() -> void:
-	assert_eq(_tick_loss(_stand(&"nature", [_tile(FIRE_TILE)])), 19,
+	assert_eq(_tick_loss(_stand(&"plant", [_tile(FIRE_TILE)])), 19,
 		"fire terrain into its opposite nature: 15 x 1.25 = 18.75 -> 19")
 
 
@@ -167,7 +167,7 @@ func test_a_fire_tile_barely_singes_a_fire_occupant() -> void:
 
 
 func test_an_unmatched_occupant_takes_the_authored_number() -> void:
-	assert_eq(_tick_loss(_stand(&"holy", [_tile(FIRE_TILE)])), 15,
+	assert_eq(_tick_loss(_stand(&"radiant", [_tile(FIRE_TILE)])), 15,
 		"fire and holy have no authored matchup, so the tile deals exactly its 15")
 	assert_eq(_tick_loss(_stand(&"", [_tile(FIRE_TILE)])), 15,
 		"and a unit with no element at all is neutral against every tile")
@@ -184,13 +184,13 @@ func test_the_tile_amplifier_and_home_benefit_are_not_folded_in() -> void:
 func test_a_second_element_on_the_cell_does_not_amplify_the_first() -> void:
 	# Fortified ground (earth) under a burning cell must not re-colour the FIRE tile's own
 	# burn; each effect is scaled by ITS OWN element, never by the cell's.
-	assert_eq(_tick_loss(_stand(&"nature", [_tile(FIRE_TILE), _tile(FORTIFY_TILE)])), 19,
+	assert_eq(_tick_loss(_stand(&"plant", [_tile(FIRE_TILE), _tile(FORTIFY_TILE)])), 19,
 		"the fire tile burns as fire regardless of what else the cell carries")
 
 
 func test_tile_damage_rounds_like_the_rest_of_the_damage_math() -> void:
 	var thirteen := _authored_burn(&"fire", 13)
-	assert_eq(_tick_loss(_stand(&"nature", [thirteen])), 16,
+	assert_eq(_tick_loss(_stand(&"plant", [thirteen])), 16,
 		"13 x 1.25 = 16.25 rounds to 16, the same round() a weapon hit uses")
 	assert_eq(_tick_loss(_stand(&"fire", [thirteen])), 10,
 		"13 x 0.75 = 9.75 rounds to 10")
@@ -202,13 +202,13 @@ func test_a_resisted_tile_still_hurts() -> void:
 
 
 func test_the_vents_lighter_burn_is_matched_too() -> void:
-	assert_eq(_tick_loss(_stand(&"nature", [_tile(VENT_TILE)])), 10,
+	assert_eq(_tick_loss(_stand(&"plant", [_tile(VENT_TILE)])), 10,
 		"the scorching vent is fire as well: 8 x 1.25 = 10")
 
 
 func test_a_snare_that_damages_on_entry_is_matched_on_entry() -> void:
 	# vine_trap is nature, ON_ENTER, enemies-only, and 18 MAGICAL damage.
-	var fixture := _stand(&"nature", [_tile(VINE_TILE)])
+	var fixture := _stand(&"plant", [_tile(VINE_TILE)])
 	var unit = fixture["unit"]
 	# The trap springs on the tile's ENEMIES; the occupant is team 1, so team 0 is the
 	# perspective the faction filter resolves against.
@@ -225,16 +225,16 @@ func test_a_snare_that_damages_on_entry_is_matched_on_entry() -> void:
 
 
 func test_a_hazard_scales_its_band_damage_by_its_own_element() -> void:
-	assert_eq(_vine_loss(&"nature", &"fire"), 25,
-		"a nature vine into a fire unit is strong: 20 x 1.25 = 25")
-	assert_eq(_vine_loss(&"nature", &"nature"), 15,
+	assert_eq(_vine_loss(&"plant", &"water"), 25,
+		"a plant vine into a water unit is strong: 20 x 1.25 = 25")
+	assert_eq(_vine_loss(&"plant", &"plant"), 15,
 		"and a nature unit shrugs it off: 20 x 0.75 = 15")
-	assert_eq(_vine_loss(&"nature", &"holy"), 20,
+	assert_eq(_vine_loss(&"plant", &"radiant"), 20,
 		"an unauthored pairing takes the snapshotted number unchanged")
 
 
 func test_an_elementless_hazard_is_exactly_what_it_always_was() -> void:
-	assert_eq(_vine_loss(&"", &"nature"), 20,
+	assert_eq(_vine_loss(&"", &"plant"), 20,
 		"a vine cast by an unelemented move deals its raw damage, as before elements")
 
 
@@ -242,15 +242,15 @@ func test_a_restored_hazard_keeps_its_element_and_an_old_save_stays_neutral() ->
 	var manager = autofree(HazardManager.new())
 	var vine := TravelingHazard.new(Vector3i.ZERO, Vector3i(1, 0, 0), 1, 2, 6, 20,
 		CombatTypes.DamageCategory.TRUE, CombatTypes.TargetKind.ANY_UNIT, null)
-	vine.element = &"nature"
+	vine.element = &"plant"
 	manager.register(vine)
 
 	var state: Dictionary = manager.snapshot_state(func(_u): return -1)
-	assert_eq(String(state["hazards"][0]["element"]), "nature",
+	assert_eq(String(state["hazards"][0]["element"]), "plant",
 		"the vine's element is part of the mid-battle snapshot")
 
 	manager.restore_state(state, func(_i): return null)
-	assert_eq(manager._hazards[0].element, &"nature", "and survives the resume")
+	assert_eq(manager._hazards[0].element, &"plant", "and survives the resume")
 
 	# A snapshot written before hazards carried an element has no such key.
 	state["hazards"][0].erase("element")
@@ -265,7 +265,7 @@ func test_a_restored_hazard_keeps_its_element_and_an_old_save_stays_neutral() ->
 
 
 func test_a_matching_occupant_reads_its_own_terrain_better() -> void:
-	var fixture := _stand(&"nature", [_tile(GRASS_TILE)])
+	var fixture := _stand(&"plant", [_tile(GRASS_TILE)])
 	assert_eq(TerrainStats.bonus_for(fixture["unit"], "evasion", fixture["board"]), 19,
 		"a nature unit in nature tall grass: +15 x 1.25 = 18.75 -> +19 evasion")
 
@@ -278,9 +278,9 @@ func test_a_stranger_gets_exactly_the_authored_bonus() -> void:
 
 
 func test_a_matching_occupant_shrugs_off_its_own_terrains_penalty() -> void:
-	var home := _stand(&"water", [_tile(ICE_TILE)])
+	var home := _stand(&"ice", [_tile(ICE_TILE)])
 	assert_eq(TerrainStats.bonus_for(home["unit"], "evasion", home["board"]), -9,
-		"a water unit keeps its feet on water ice: -10 x 0.9 = -9 evasion")
+		"an ice unit keeps its feet on the ice: -10 x 0.9 = -9 evasion")
 	var stranger := _stand(&"fire", [_tile(ICE_TILE)])
 	assert_eq(TerrainStats.bonus_for(stranger["unit"], "evasion", stranger["board"]), -10,
 		"and everyone else takes the full authored penalty")
@@ -288,27 +288,27 @@ func test_a_matching_occupant_shrugs_off_its_own_terrains_penalty() -> void:
 
 func test_the_sign_of_an_effect_can_never_be_flipped() -> void:
 	assert_true(ElementChart.home_effect_amount(_tile(ICE_TILE), -10,
-		_ElementUnit.new(&"water", 100)) < 0,
+		_ElementUnit.new(&"ice", 100)) < 0,
 		"a penalty stays a penalty, however generous the scale")
 	assert_true(ElementChart.home_effect_amount(_tile(GRASS_TILE), 15,
-		_ElementUnit.new(&"nature", 100)) > 0,
+		_ElementUnit.new(&"plant", 100)) > 0,
 		"and a benefit stays a benefit")
 	assert_eq(ElementChart.home_effect_amount(_tile(ICE_TILE), -1,
-		_ElementUnit.new(&"water", 100)), -1,
+		_ElementUnit.new(&"ice", 100)), -1,
 		"a magnitude of 1 floors at 1 -- no scale can erase an authored effect")
 	assert_eq(ElementChart.home_effect_amount(_tile(GRASS_TILE), 0,
-		_ElementUnit.new(&"nature", 100)), 0,
+		_ElementUnit.new(&"plant", 100)), 0,
 		"and nothing is still nothing")
 
 
 func test_a_heal_a_tile_grants_is_modulated_at_home() -> void:
-	var home := _stand(&"nature", [_tile(MEADOW_TILE)])
+	var home := _stand(&"plant", [_tile(MEADOW_TILE)])
 	home["unit"].hp = 50
 	autofree(TileEffectSystem.new()).on_turn_start(home["unit"], home["board"])
 	assert_eq(home["unit"].hp, 63,
 		"a NATURE unit on the nature meadow heals 10 x 1.25 = 12.5 -> 13")
 
-	for element in [&"holy", &"dark", &""]:
+	for element in [&"radiant", &"grim", &""]:
 		var stranger := _stand(element, [_tile(MEADOW_TILE)])
 		stranger["unit"].hp = 50
 		autofree(TileEffectSystem.new()).on_turn_start(stranger["unit"], stranger["board"])
@@ -321,7 +321,7 @@ func test_modulating_an_effect_never_mutates_the_shared_resource() -> void:
 	# place would retune the terrain for the whole board (CONQUEST.md rule 7).
 	var meadow := _tile(MEADOW_TILE)
 	var authored: int = int(meadow.effects[0].amount)
-	var home := _stand(&"nature", [meadow])
+	var home := _stand(&"plant", [meadow])
 	home["unit"].hp = 50
 	autofree(TileEffectSystem.new()).on_turn_start(home["unit"], home["board"])
 	assert_eq(int(meadow.effects[0].amount), authored,
@@ -332,7 +332,7 @@ func test_the_at_home_summary_is_what_the_run_applies() -> void:
 	# The panel's boost line reads this; the run scales through the same function, so the
 	# number the card promises is the heal the unit is about to receive (rule 9).
 	var meadow := _tile(MEADOW_TILE)
-	var home := _stand(&"nature", [meadow])
+	var home := _stand(&"plant", [meadow])
 	var summary: Dictionary = meadow.home_summary_for(home["unit"])
 	assert_eq(int(summary["authored"]), 10, "the meadow authors a 10 HP heal")
 	assert_eq(int(summary["landed"]), 13, "which lands as 13 for a nature occupant")
@@ -351,15 +351,15 @@ func test_the_at_home_summary_is_what_the_run_applies() -> void:
 
 func test_the_at_home_summary_reports_stat_tiles_and_penalties() -> void:
 	var grass := _tile(GRASS_TILE)
-	var in_grass := _stand(&"nature", [grass])
+	var in_grass := _stand(&"plant", [grass])
 	var boost: Dictionary = grass.home_summary_for(in_grass["unit"])
 	assert_eq(int(boost["landed"]), 19, "tall grass reads +15 -> +19 for a nature unit")
 	assert_eq(boost["kind"], &"stat", "and it is a stat change, not a heal")
 
 	var ice := _tile(ICE_TILE)
-	var on_ice := _stand(&"water", [ice])
+	var on_ice := _stand(&"ice", [ice])
 	var softened: Dictionary = ice.home_summary_for(on_ice["unit"])
-	assert_eq(int(softened["landed"]), -9, "ice reads -10 -> -9 for a water unit")
+	assert_eq(int(softened["landed"]), -9, "ice reads -10 -> -9 for an ice unit")
 
 	var rubble := _tile(RUBBLE_TILE)
 	var summary: Dictionary = rubble.home_summary_for(_ElementUnit.new(&"earth", 100))
@@ -402,7 +402,7 @@ func test_move_cost_is_deliberately_untouched_by_elements() -> void:
 
 
 func test_the_panels_damage_readout_is_the_tick_itself() -> void:
-	for element in [&"nature", &"fire", &"holy", &"", &"plasma"]:
+	for element in [&"plant", &"fire", &"radiant", &"", &"plasma"]:
 		var fixture := _stand(element, [_tile(FIRE_TILE)])
 		var previewed: int = _tile(FIRE_TILE).damage_preview_for(
 			fixture["unit"], fixture["board"])
@@ -411,7 +411,7 @@ func test_the_panels_damage_readout_is_the_tick_itself() -> void:
 
 
 func test_a_tile_that_deals_no_damage_previews_nothing() -> void:
-	var fixture := _stand(&"nature", [_tile(GRASS_TILE)])
+	var fixture := _stand(&"plant", [_tile(GRASS_TILE)])
 	assert_eq(_tile(GRASS_TILE).damage_preview_for(fixture["unit"], fixture["board"]), 0,
 		"tall grass conceals; it does not burn, and the card must not claim it does")
 	assert_eq(_tile(FIRE_TILE).damage_preview_for(null, null), 0,
@@ -420,7 +420,7 @@ func test_a_tile_that_deals_no_damage_previews_nothing() -> void:
 
 func test_the_readout_is_deterministic() -> void:
 	# No RNG anywhere in the element path: identical inputs, identical answer, every time.
-	var fixture := _stand(&"nature", [_tile(FIRE_TILE)])
+	var fixture := _stand(&"plant", [_tile(FIRE_TILE)])
 	var first: int = _tile(FIRE_TILE).damage_preview_for(fixture["unit"], fixture["board"])
 	for i in range(8):
 		assert_eq(_tile(FIRE_TILE).damage_preview_for(fixture["unit"], fixture["board"]),

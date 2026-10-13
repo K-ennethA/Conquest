@@ -30,6 +30,8 @@ func _unit(character: String, cell: Vector3i) -> Unit:
 
 func _setup() -> Dictionary:
 	var myco := _unit("mycothrall", Vector3i(1, 1, 0))
+	# A PLANT unit for Overbloom (Mycothrall is bug/poison since the 15-type pass).
+	var bloom := _unit("blightcap", Vector3i(2, 3, 0))
 	var geode := _unit("gem_knight", Vector3i(4, 1, 0))
 	var necro := _unit("necromancer", Vector3i(6, 1, 0))
 	CombatServices._board = BoardAdapter.new(GRID, _root)
@@ -37,11 +39,12 @@ func _setup() -> Dictionary:
 	var p1 := Player.new(0, "P1")
 	var p2 := Player.new(1, "P2")
 	p1.add_unit(myco)
+	p1.add_unit(bloom)
 	p2.add_unit(geode)
 	p2.add_unit(necro)
 	ts.register_player(p1)
 	ts.register_player(p2)
-	return { "ts": ts, "myco": myco, "geode": geode, "necro": necro }
+	return { "ts": ts, "myco": myco, "bloom": bloom, "geode": geode, "necro": necro }
 
 
 func test_desert_storm_turn_start_chips_and_veils() -> void:
@@ -86,16 +89,16 @@ func test_overbloom_heals_nature_units_at_turn_start() -> void:
 	var s := _setup()
 	CombatServices.configure_weather(_map({ "mode": "fixed", "weather": "overbloom" }), 1)
 	var ts: TraditionalTurnSystem = s["ts"]
-	var myco: Unit = s["myco"]
+	var bloom: Unit = s["bloom"]
 	var necro: Unit = s["necro"]
-	myco.take_damage(10)
+	bloom.take_damage(10)
 	necro.take_damage(10)
-	var m := myco.current_health
+	var m := bloom.current_health
 	var n := necro.current_health
-	ts._tick_unit_turn_start(myco)
+	ts._tick_unit_turn_start(bloom)
 	ts._tick_unit_turn_start(necro)
-	assert_eq(myco.current_health, m + roundi(myco.max_health * 0.1), "nature regrowth")
-	assert_eq(necro.current_health, n, "dark unit does not bloom")
+	assert_eq(bloom.current_health, m + roundi(bloom.max_health * 0.1), "plant regrowth")
+	assert_eq(necro.current_health, n, "a grim unit does not bloom")
 
 
 func _map(settings: Dictionary) -> MapResource:

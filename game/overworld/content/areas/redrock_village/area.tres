@@ -1,0 +1,190 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_kqxl0"]
+[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_u6nw3"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_si2e6"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_k1ywf"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="5_4w3vk"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="6_s3vo6"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="7_dmq2s"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="8_ywp34"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/redrock_village/terrain.tres" id="9_s10a4"]
+
+[sub_resource type="Resource" id="Resource_qmadn"]
+script = ExtResource("1_kqxl0")
+footprint = Vector2i(3, 2)
+id = &"house_0"
+cell = Vector3i(3, 3, 0)
+tint = Color(0.74, 0.46, 0.32, 1)
+
+[sub_resource type="Resource" id="Resource_qejv2"]
+script = ExtResource("1_kqxl0")
+footprint = Vector2i(3, 2)
+id = &"house_1"
+cell = Vector3i(17, 4, 0)
+tint = Color(0.6512, 0.4048, 0.2816, 1)
+
+[sub_resource type="Resource" id="Resource_m42x2"]
+script = ExtResource("1_kqxl0")
+footprint = Vector2i(3, 2)
+id = &"house_2"
+cell = Vector3i(4, 13, 0)
+tint = Color(0.74, 0.46, 0.32, 1)
+
+[sub_resource type="Resource" id="Resource_7tywy"]
+script = ExtResource("1_kqxl0")
+footprint = Vector2i(3, 2)
+id = &"house_3"
+cell = Vector3i(18, 13, 0)
+tint = Color(0.6512, 0.4048, 0.2816, 1)
+
+[sub_resource type="Resource" id="Resource_1qhs8"]
+script = ExtResource("1_kqxl0")
+footprint = Vector2i(4, 3)
+id = &"elder_hall"
+cell = Vector3i(9, 3, 0)
+tint = Color(0.62, 0.32, 0.22, 1)
+
+[sub_resource type="Resource" id="Resource_jm78s"]
+script = ExtResource("1_kqxl0")
+prop = "tent"
+footprint = Vector2i(2, 1)
+id = &"market_tent"
+cell = Vector3i(18, 9, 0)
+tint = Color(0.82, 0.62, 0.36, 1)
+
+[sub_resource type="Resource" id="Resource_cmwce"]
+script = ExtResource("1_kqxl0")
+prop = "well"
+footprint = Vector2i(1, 1)
+id = &"well"
+cell = Vector3i(9, 11, 0)
+tint = Color(0.58, 0.36, 0.24, 1)
+
+[sub_resource type="Resource" id="Resource_doyfa"]
+script = ExtResource("1_kqxl0")
+prop = "cart"
+footprint = Vector2i(1, 1)
+id = &"cart"
+cell = Vector3i(21, 8, 0)
+tint = Color(0.82, 0.62, 0.36, 1)
+
+[sub_resource type="Resource" id="Resource_61nig"]
+script = ExtResource("2_u6nw3")
+id = &"wayshrine"
+cell = Vector3i(14, 10, 0)
+display_name = "Redrock Wayshrine"
+tint = Color(0.55, 0.92, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_squ05"]
+script = ExtResource("3_si2e6")
+text = "REDROCK VILLAGE
+West: the Redrock road to Crownhaven.  South: the Red Desert."
+id = &"village_sign"
+cell = Vector3i(2, 8, 0)
+display_name = "Redrock Village"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_tq5qp"]
+script = ExtResource("4_k1ywf")
+speaker_id = &"npc_rv_elder"
+speaker_name = "Redrock Elder"
+figure = "elder"
+id = &"rv_elder"
+cell = Vector3i(11, 7, 0)
+display_name = "Redrock Elder"
+tint = Color(0.694, 0.514, 0.388, 1)
+
+[sub_resource type="Resource" id="Resource_fdpun"]
+script = ExtResource("4_k1ywf")
+speaker_id = &"npc_rv_miner"
+speaker_name = "Miner"
+figure = "villager"
+id = &"rv_miner"
+cell = Vector3i(7, 11, 0)
+facing = "east"
+display_name = "Miner"
+tint = Color(0.48, 0.4, 0.34, 1)
+
+[sub_resource type="Resource" id="Resource_8kxfc"]
+script = ExtResource("4_k1ywf")
+speaker_id = &"npc_rv_trader"
+speaker_name = "Caravan Trader"
+figure = "villager"
+id = &"rv_trader"
+cell = Vector3i(18, 10, 0)
+facing = "west"
+display_name = "Caravan Trader"
+tint = Color(0.6, 0.5, 0.3, 1)
+
+[sub_resource type="Resource" id="Resource_1xg0d"]
+script = ExtResource("4_k1ywf")
+speaker_id = &"npc_rv_watch"
+speaker_name = "Mesa Watch"
+figure = "guard"
+id = &"rv_watch"
+cell = Vector3i(13, 17, 0)
+facing = "west"
+display_name = "Mesa Watch"
+tint = Color(0.56100005, 0.39100003, 0.272, 1)
+
+[sub_resource type="Resource" id="Resource_8f3fd"]
+script = ExtResource("4_k1ywf")
+speaker_id = &"npc_rv_child"
+speaker_name = "Redrock Child"
+figure = "child"
+id = &"rv_child"
+cell = Vector3i(16, 15, 0)
+facing = "north"
+display_name = "Redrock Child"
+tint = Color(0.8, 0.56, 0.4, 1)
+
+[sub_resource type="Resource" id="Resource_jiyct"]
+script = ExtResource("5_4w3vk")
+area_rect = Rect2i(0, 9, 1, 1)
+target_area = &"rocky_badlands"
+target_entry = &"east_road"
+id = &"west_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_yh8s1"]
+script = ExtResource("5_4w3vk")
+area_rect = Rect2i(12, 19, 1, 1)
+target_area = &"red_desert"
+target_entry = &"north_trail"
+id = &"south_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_t5xhn"]
+script = ExtResource("7_dmq2s")
+key = "redrock.arrived"
+
+[sub_resource type="Resource" id="Resource_le6wo"]
+script = ExtResource("6_s3vo6")
+condition = "not has(\"redrock.arrived\")"
+then_commands = Array[Resource]([SubResource("Resource_t5xhn")])
+
+[resource]
+script = ExtResource("8_ywp34")
+area_id = &"redrock_village"
+display_name = "Redrock Village"
+terrain = ExtResource("9_s10a4")
+region_id = &"rocky_badlands"
+world_map_pos = Vector2(0.856, 0.41)
+entry_points = {
+"south_trail": {
+"cell": [12, 18, 0],
+"facing": "north"
+},
+"wayshrine": {
+"cell": [14, 11, 0],
+"facing": "north"
+},
+"west_road": {
+"cell": [1, 9, 0],
+"facing": "east"
+}
+}
+entities = Array[Resource]([SubResource("Resource_qmadn"), SubResource("Resource_qejv2"), SubResource("Resource_m42x2"), SubResource("Resource_7tywy"), SubResource("Resource_1qhs8"), SubResource("Resource_jm78s"), SubResource("Resource_cmwce"), SubResource("Resource_doyfa"), SubResource("Resource_61nig"), SubResource("Resource_squ05"), SubResource("Resource_tq5qp"), SubResource("Resource_fdpun"), SubResource("Resource_8kxfc"), SubResource("Resource_1xg0d"), SubResource("Resource_8f3fd"), SubResource("Resource_jiyct"), SubResource("Resource_yh8s1")])
+on_enter = Array[Resource]([SubResource("Resource_le6wo")])
+level_band = Vector2i(22, 30)

@@ -12,7 +12,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"tree_grunt"
-element = &"nature"
+element = &"plant"
 display_name = "Barkling"
 description = "A lurching sapling animated by the Great Tree's will. Slow and brittle alone, but the forest never sends just one."
 model_scene = ExtResource("2_model")

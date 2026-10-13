@@ -17,6 +17,8 @@ const ENTERABLE := {
 	"river_crossing": ["toll_house"],
 	"crownhaven": ["workshop", "barracks", "gilded_stag", "guildhall", "chapel", "forge"],
 	"woodland_town": ["wardens_lodge", "stumped_hart", "trading_post", "forge", "herb_hut"],
+	# The sleeping town (DECISIONS.md #95): the inn's beds and a house of sleepers.
+	"frostpeak_village": ["fp_inn", "fp_house"],
 }
 const BUILDING_KINDS: Array[String] = ["house", "ruin", "keep", "cabin", "chapel", "smithy", "windmill", "arena"]
 
@@ -192,7 +194,7 @@ func test_every_door_leads_to_its_interior_and_back_out_front() -> void:
 			if mat != null:
 				assert_true(exit.occupies(mat.cell), "the exit is ON the mat")
 				assert_false(mat.is_blocking(), "the mat is walked onto")
-	assert_eq(seen, 16, "every opted-in building has its door")
+	assert_eq(seen, 18, "every opted-in building has its door")
 
 
 func test_interiors_are_small_reachable_rooms_with_no_wild_creatures() -> void:
@@ -229,7 +231,7 @@ func test_interiors_are_small_reachable_rooms_with_no_wild_creatures() -> void:
 						open_floor += 1
 						assert_true(reach.has(c), "%s: floor cell %s is reachable" % [id, c])
 			assert_gt(open_floor, 30, "%s: a room to walk round" % id)
-	assert_eq(rooms, 16, "the shipped interiors")
+	assert_eq(rooms, 18, "the shipped interiors")
 
 
 # --- walking through doors ---------------------------------------------------------------------

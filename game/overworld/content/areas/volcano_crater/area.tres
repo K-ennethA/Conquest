@@ -1,0 +1,148 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_6a6mi"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/BondLegendCommand.gd" id="2_qutwf"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="3_itt7c"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="4_wtt67"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="5_7lqgv"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_1bjh8"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="7_5k4v0"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="8_28q4h"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartBattleCommand.gd" id="9_olx12"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="10_5ewbt"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="11_b3pmm"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="12_qqq0c"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="13_un1m6"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/volcano_crater/terrain.tres" id="14_1mevm"]
+
+[sub_resource type="Resource" id="Resource_dfain"]
+script = ExtResource("1_6a6mi")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"rim_fire_5_4"
+cell = Vector3i(5, 4, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_e3qfe"]
+script = ExtResource("1_6a6mi")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"rim_fire_8_5"
+cell = Vector3i(8, 5, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_pltfi"]
+script = ExtResource("2_qutwf")
+character_id = &"vineweave"
+
+[sub_resource type="Resource" id="Resource_xj7sp"]
+script = ExtResource("3_itt7c")
+key = "legend.volcano.bonded"
+
+[sub_resource type="Resource" id="Resource_8hjhk"]
+script = ExtResource("4_wtt67")
+
+[sub_resource type="Resource" id="Resource_t74a4"]
+script = ExtResource("5_7lqgv")
+label = "Bond"
+commands = Array[Resource]([SubResource("Resource_pltfi"), SubResource("Resource_xj7sp"), SubResource("Resource_8hjhk")])
+
+[sub_resource type="Resource" id="Resource_lk60r"]
+script = ExtResource("5_7lqgv")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_p86ih"]
+script = ExtResource("6_1bjh8")
+text = "Vineweave watches you, still. Bond with it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_aicnk"]
+script = ExtResource("7_5k4v0")
+prompt = SubResource("Resource_p86ih")
+options = Array[Resource]([SubResource("Resource_t74a4"), SubResource("Resource_lk60r")])
+
+[sub_resource type="Resource" id="Resource_8rdlx"]
+script = ExtResource("10_5ewbt")
+kind = 1
+encounter_id = "postgame.legend.volcano"
+opponent_name = "Vineweave"
+opponent_speaker_id = &"npc_volcano_legend"
+opponent_team = Array[Dictionary]([{
+"character_id": "vineweave",
+"strength": 1.0
+}])
+reward_flags = Array[String](["postgame.volcano_legend_beaten"])
+clash_intro = true
+enemy_level = 45
+boss_battle = true
+
+[sub_resource type="Resource" id="Resource_7o543"]
+script = ExtResource("9_olx12")
+spec = SubResource("Resource_8rdlx")
+
+[sub_resource type="Resource" id="Resource_in1wa"]
+script = ExtResource("8_28q4h")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_aicnk")])
+
+[sub_resource type="Resource" id="Resource_uhl5f"]
+script = ExtResource("5_7lqgv")
+label = "Face it"
+commands = Array[Resource]([SubResource("Resource_7o543"), SubResource("Resource_in1wa")])
+
+[sub_resource type="Resource" id="Resource_6x5xb"]
+script = ExtResource("5_7lqgv")
+label = "Not yet"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_dto45"]
+script = ExtResource("6_1bjh8")
+text = "Heat rolls off the crater, and something vast stirs in the glow. Face it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_aphpk"]
+script = ExtResource("7_5k4v0")
+prompt = SubResource("Resource_dto45")
+options = Array[Resource]([SubResource("Resource_uhl5f"), SubResource("Resource_6x5xb")])
+
+[sub_resource type="Resource" id="Resource_0dpw7"]
+script = ExtResource("8_28q4h")
+condition = "not has(\"postgame.volcano_legend_beaten\")"
+then_commands = Array[Resource]([SubResource("Resource_aphpk")])
+else_commands = Array[Resource]([SubResource("Resource_aicnk")])
+
+[sub_resource type="Resource" id="Resource_h1yt5"]
+script = ExtResource("11_b3pmm")
+speaker_name = "Vineweave"
+id = &"volcano_legend"
+cell = Vector3i(7, 1, 0)
+display_name = "Vineweave"
+visual_character = &"vineweave"
+visible_if = "not has(\"legend.volcano.bonded\")"
+on_interact = Array[Resource]([SubResource("Resource_0dpw7")])
+
+[sub_resource type="Resource" id="Resource_xhsyx"]
+script = ExtResource("12_qqq0c")
+area_rect = Rect2i(7, 11, 1, 1)
+target_area = &"volcano_path"
+target_entry = &"north"
+id = &"south_exit"
+blocking = false
+
+[resource]
+script = ExtResource("13_un1m6")
+area_id = &"volcano_crater"
+display_name = "The Volcano's Crater"
+terrain = ExtResource("14_1mevm")
+kind = 3
+region_id = &"open_ocean"
+world_map_pos = Vector2(0.645, 0.8)
+entry_points = {
+"south": {
+"cell": [7, 10, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_dfain"), SubResource("Resource_e3qfe"), SubResource("Resource_h1yt5"), SubResource("Resource_xhsyx")])
+level_band = Vector2i(30, 40)

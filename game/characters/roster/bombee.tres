@@ -6,7 +6,8 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"bombee"
-element = &"nature"
+element = &"bug"
+element2 = &"metal"
 display_name = "Bombee"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Firefly pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")

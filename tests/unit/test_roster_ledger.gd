@@ -11,6 +11,10 @@ const LEDGER_PATH := "user://test_evo_roster_ledger.json"
 const ITEMS_PATH := "user://test_evo_roster_items.json"
 const ITEM := "ironbark_sigil"
 const OTHER_ITEM := "heartwood_charm"
+## The test-only Barkling -> Mycothrall edge (Growth 3 + 2 wins), served beside the shipped content.
+const EvoFixture := preload("res://tests/helpers/evolution_fixture.gd")
+## A unit in no evolution line (shipped or fixture).
+const NO_LINE := "gem_knight"
 
 var _edge: EvolutionResource = null
 var _goal: int = 0
@@ -25,13 +29,14 @@ func before_all() -> void:
 func before_each() -> void:
 	RosterLedger.reset()
 	ItemInventory.reset()
-	_edge = EvolutionLibrary.get_edge(&"tree_grunt__oakheart")
+	_edge = EvoFixture.install()
 	_goal = _edge.growth_goal() if _edge != null else 3
 
 
 func after_each() -> void:
 	RosterLedger.reset()
 	ItemInventory.reset()
+	EvoFixture.uninstall()
 
 
 func after_all() -> void:
@@ -48,8 +53,8 @@ func after_all() -> void:
 
 func test_every_form_of_a_line_is_one_open_mode_member() -> void:
 	assert_eq(RosterLedger.member_for_character("tree_grunt"), "tree_grunt", "a base form's member is its own id")
-	assert_eq(RosterLedger.member_for_character("oakheart"), "tree_grunt", "an evolved form resolves to its line's member")
-	assert_eq(RosterLedger.member_for_character("vineweave"), "vineweave", "a unit with no line is its own member")
+	assert_eq(RosterLedger.member_for_character("mycothrall"), "tree_grunt", "an evolved form resolves to its line's member")
+	assert_eq(RosterLedger.member_for_character(NO_LINE), NO_LINE, "a unit with no line is its own member")
 
 
 func test_growth_accumulates_per_member() -> void:
@@ -63,7 +68,7 @@ func test_growth_accumulates_per_member() -> void:
 	assert_eq(RosterLedger.form_of("tree_grunt"), &"tree_grunt", "an implicit member is its base form")
 
 
-## Barkling -> Oakheart also needs 2 won battles (EVOLUTION.md §3.2a): meet that part.
+## Barkling -> Mycothrall also needs 2 won battles (EVOLUTION.md §3.2a): meet that part.
 func _meet_the_wins() -> void:
 	RosterLedger.add_feats("tree_grunt", {"wins": 2})
 
@@ -76,7 +81,7 @@ func test_availability_opens_exactly_at_the_goal() -> void:
 	RosterLedger.add_growth("tree_grunt", 1)
 	var offers := RosterLedger.available_evolutions("tree_grunt")
 	assert_eq(offers.size(), 1, "at the goal the evolution is offered")
-	assert_eq(offers[0], _edge, "and it is Barkling -> Oakheart")
+	assert_eq(offers[0], _edge, "and it is Barkling -> Mycothrall")
 	assert_eq(RosterLedger.pending_evolutions(["tree_grunt", "vineweave"]), ["tree_grunt"] as Array[String],
 		"the story hook names only the members with an evolution ready")
 
@@ -84,18 +89,18 @@ func test_availability_opens_exactly_at_the_goal() -> void:
 # --- evolve() -------------------------------------------------------------------------
 
 func test_evolve_unlocks_records_and_sets_the_form() -> void:
-	assert_false(RosterLedger.is_form_unlocked("oakheart"), "Oakheart starts locked")
+	assert_false(RosterLedger.is_form_unlocked("mycothrall"), "Mycothrall starts locked")
 	assert_true(RosterLedger.is_form_unlocked("tree_grunt"), "a base form is always unlocked")
 	RosterLedger.add_growth("tree_grunt", _goal)
 	_meet_the_wins()
 	var result := RosterLedger.evolve("tree_grunt", _edge)
 	assert_true(bool(result["success"]), "evolve succeeds at the goal: %s" % str(result))
-	assert_true(RosterLedger.is_form_unlocked("oakheart"), "Oakheart is now unlocked for open modes")
+	assert_true(RosterLedger.is_form_unlocked("mycothrall"), "Mycothrall is now unlocked for open modes")
 	assert_true(RosterLedger.is_form_unlocked("tree_grunt"), "and Barkling stays pickable")
-	assert_eq(RosterLedger.form_of("tree_grunt"), &"oakheart", "the member IS Oakheart now (story semantics)")
+	assert_eq(RosterLedger.form_of("tree_grunt"), &"mycothrall", "the member IS Mycothrall now (story semantics)")
 	var history := RosterLedger.evolution_history("tree_grunt")
 	assert_eq(history.size(), 1, "the step is recorded")
-	assert_eq(String(history[0]["edge"]), "tree_grunt__oakheart", "with its edge id")
+	assert_eq(String(history[0]["edge"]), String(EvoFixture.EDGE_ID), "with its edge id")
 	assert_false(String(history[0]["at"]).is_empty(), "and a timestamp")
 	assert_eq(RosterLedger.growth_of("tree_grunt"), _goal, "growth is cumulative, not reset by evolving")
 	assert_eq(RosterLedger.available_evolutions("tree_grunt").size(), 0, "a final form offers nothing more")
@@ -108,7 +113,7 @@ func test_evolve_refuses_without_writing_anything() -> void:
 	assert_false(bool(early["success"]), "below the goal evolve is refused")
 	assert_eq(String(early["reason"]), "not_available", "and says why")
 	assert_eq(RosterLedger.form_of("tree_grunt"), &"tree_grunt", "the form did not change")
-	assert_false(RosterLedger.is_form_unlocked("oakheart"), "nothing was unlocked")
+	assert_false(RosterLedger.is_form_unlocked("mycothrall"), "nothing was unlocked")
 	assert_eq(String(RosterLedger.evolve("tree_grunt", null)["reason"]), "no_edge", "a null edge is refused")
 	assert_eq(String(RosterLedger.evolve("vineweave", _edge)["reason"]), "wrong_form",
 		"an edge from another form is refused")
@@ -121,7 +126,7 @@ func test_evolve_carries_the_item_only_when_the_new_form_wears_none() -> void:
 	_meet_the_wins()
 	var result := RosterLedger.evolve("tree_grunt", _edge)
 	assert_true(bool(result["item_moved"]), "the Ironbark Sigil moved")
-	assert_eq(ItemInventory.equipped_item("oakheart"), ITEM, "Oakheart now wears it")
+	assert_eq(ItemInventory.equipped_item("mycothrall"), ITEM, "Mycothrall now wears it")
 	assert_eq(ItemInventory.equipped_item("tree_grunt"), "", "and Barkling no longer does")
 
 
@@ -129,13 +134,13 @@ func test_evolve_never_overwrites_an_item_the_new_form_already_wears() -> void:
 	ItemInventory.grant(ITEM)
 	ItemInventory.grant(OTHER_ITEM)
 	ItemInventory.equip("tree_grunt", ITEM)
-	ItemInventory.equip("oakheart", OTHER_ITEM)
+	ItemInventory.equip("mycothrall", OTHER_ITEM)
 	RosterLedger.add_growth("tree_grunt", _goal)
 	_meet_the_wins()
 	var result := RosterLedger.evolve("tree_grunt", _edge)
 	assert_true(bool(result["success"]), "the evolution itself still happens")
 	assert_false(bool(result["item_moved"]), "but no item moved")
-	assert_eq(ItemInventory.equipped_item("oakheart"), OTHER_ITEM, "Oakheart keeps its own item")
+	assert_eq(ItemInventory.equipped_item("mycothrall"), OTHER_ITEM, "Mycothrall keeps its own item")
 	assert_eq(ItemInventory.equipped_item("tree_grunt"), ITEM, "and Barkling keeps its")
 
 
@@ -143,14 +148,14 @@ func test_scripted_story_evolution_skips_triggers_but_not_the_form_check() -> vo
 	var uid := RosterLedger.create_member("tree_grunt")
 	assert_eq(uid, "tree_grunt#2", "a story recruit is an individual member of the line")
 	assert_eq(RosterLedger.form_of(uid), &"tree_grunt", "joining as Barkling")
-	assert_false(bool(RosterLedger.evolve_member(uid, &"tree_grunt__oakheart")["success"]),
+	assert_false(bool(RosterLedger.evolve_member(uid, EvoFixture.EDGE_ID)["success"]),
 		"an unscripted evolve still needs the growth")
-	assert_true(bool(RosterLedger.evolve_member(uid, &"tree_grunt__oakheart", true)["success"]),
+	assert_true(bool(RosterLedger.evolve_member(uid, EvoFixture.EDGE_ID, true)["success"]),
 		"a scripted story beat evolves it anyway")
-	assert_eq(RosterLedger.form_of(uid), &"oakheart", "the story member became Oakheart")
+	assert_eq(RosterLedger.form_of(uid), &"mycothrall", "the story member became Mycothrall")
 	assert_eq(RosterLedger.form_of("tree_grunt"), &"tree_grunt", "without touching the open-mode member")
-	assert_eq(String(RosterLedger.evolve_member(uid, &"tree_grunt__oakheart", true)["reason"]), "wrong_form",
-		"an Oakheart cannot take the Barkling edge again")
+	assert_eq(String(RosterLedger.evolve_member(uid, EvoFixture.EDGE_ID, true)["reason"]), "wrong_form",
+		"a Mycothrall cannot take the Barkling edge again")
 	assert_eq(RosterLedger.create_member("no_such_unit"), "", "an unknown character cannot join")
 
 
@@ -167,14 +172,19 @@ func test_the_open_mode_checklist() -> void:
 	RosterLedger.add_growth("tree_grunt", _goal)
 	RosterLedger.add_feats("tree_grunt", {"wins": 1})
 	var lists: Array[Dictionary] = RosterLedger.checklists("tree_grunt")
-	assert_eq(lists.size(), 1, "one entry per next form")
-	assert_eq(lists[0]["edge"], _edge, "Barkling -> Oakheart")
-	assert_false(bool(lists[0]["available"]), "not available yet")
-	var rows: Array = lists[0]["rows"]
+	assert_eq(lists.size(), EvolutionLibrary.edges_from("tree_grunt").size(),
+		"one entry per next form (the fixture beside Barkling's shipped Sunstone branch)")
+	var entry: Dictionary = {}
+	for l in lists:
+		if l["edge"] == _edge:
+			entry = l
+	assert_false(entry.is_empty(), "Barkling -> Mycothrall is listed")
+	assert_false(bool(entry.get("available", true)), "not available yet")
+	var rows: Array = entry.get("rows", [])
 	assert_true(bool(rows[0]["met"]), "Growth met")
 	assert_false(bool(rows[1]["met"]), "wins not yet")
 	assert_eq(String(rows[1]["progress"]), "1/2", "1 of 2 wins")
-	assert_eq(RosterLedger.checklists("vineweave").size(), 0, "a unit in no line has no checklist")
+	assert_eq(RosterLedger.checklists(NO_LINE).size(), 0, "a unit in no line has no checklist")
 
 
 func test_hold_is_per_member_and_filters_the_automatic_question() -> void:
@@ -232,8 +242,8 @@ func test_round_trip_save_and_load() -> void:
 	assert_true(RosterLedger.save(), "the ledger saves")
 	RosterLedger.set_save_path(LEDGER_PATH)   # drops the cache: the next read is from disk
 	assert_eq(RosterLedger.growth_of("tree_grunt"), _goal, "growth survives the round trip")
-	assert_eq(RosterLedger.form_of("tree_grunt"), &"oakheart", "the form survives")
-	assert_true(RosterLedger.is_form_unlocked("oakheart"), "the unlock survives")
+	assert_eq(RosterLedger.form_of("tree_grunt"), &"mycothrall", "the form survives")
+	assert_true(RosterLedger.is_form_unlocked("mycothrall"), "the unlock survives")
 	assert_eq(RosterLedger.evolution_history("tree_grunt").size(), 1, "the history survives")
 	assert_eq(RosterLedger.nickname_of("vineweave"), "Ivy", "a nickname survives")
 

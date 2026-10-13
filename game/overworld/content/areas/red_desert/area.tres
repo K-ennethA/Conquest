@@ -1,0 +1,186 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_fh7tx"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_b7skn"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="3_hwhb2"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_dpqm2"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="5_udh7e"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/EmoteCommand.gd" id="6_xvkdp"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/MoveActorCommand.gd" id="7_ksknh"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="8_v7sev"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="9_otikv"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="10_i76iq"]
+[ext_resource type="Script" path="res://game/overworld/data/TriggerZone.gd" id="11_v8t4v"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="12_k2ri0"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="13_qpnft"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/red_desert/terrain.tres" id="14_s8uli"]
+
+[sub_resource type="Resource" id="Resource_ig3el"]
+script = ExtResource("2_b7skn")
+character_id = &"monster"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_p2vu0"]
+script = ExtResource("2_b7skn")
+character_id = &"gem_knight"
+weight = 1.5
+
+[sub_resource type="Resource" id="Resource_ulspt"]
+script = ExtResource("2_b7skn")
+character_id = &"blightcap"
+
+[sub_resource type="Resource" id="Resource_0wso0"]
+script = ExtResource("1_fh7tx")
+table = Array[Resource]([SubResource("Resource_ig3el"), SubResource("Resource_p2vu0"), SubResource("Resource_ulspt")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_wneio"]
+script = ExtResource("3_hwhb2")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"cave_arch"
+cell = Vector3i(23, 8, 0)
+tint = Color(0.5, 0.26, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_sts66"]
+script = ExtResource("4_dpqm2")
+speaker_id = &"npc_hooded_figure"
+speaker_name = "Hooded Figure"
+figure = "raider"
+id = &"hooded_figure"
+cell = Vector3i(8, 5, 0)
+display_name = "Hooded Figure"
+tint = Color(0.18, 0.14, 0.16, 1)
+visible_if = "not has(\"badlands.figure_entered\")"
+
+[sub_resource type="Resource" id="Resource_6mdta"]
+script = ExtResource("5_udh7e")
+text = "A note, torn and dusty: \"...at the end of the cave, speak the words. First DUST ... and last of all, CROWN.\" The middle of it is torn away."
+look = "note"
+id = &"crumpled_note"
+cell = Vector3i(8, 6, 0)
+display_name = "Crumpled Note"
+tint = Color(0.55, 0.9, 0.6, 1)
+visible_if = "has(\"badlands.figure_fled_1\")"
+
+[sub_resource type="Resource" id="Resource_vdh6t"]
+script = ExtResource("6_xvkdp")
+actor = "hooded_figure"
+
+[sub_resource type="Resource" id="Resource_tr0mo"]
+script = ExtResource("7_ksknh")
+actor = "hooded_figure"
+to = Vector3i(15, 12, 0)
+persist = true
+
+[sub_resource type="Resource" id="Resource_kjgus"]
+script = ExtResource("8_v7sev")
+key = "badlands.figure_fled_1"
+
+[sub_resource type="Resource" id="Resource_1rgcc"]
+script = ExtResource("9_otikv")
+text = "The hooded figure glances back at you -- and hurries off into the desert. Something flutters to the sand where they stood."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_pn6o6"]
+script = ExtResource("10_i76iq")
+beats = Array[Resource]([SubResource("Resource_1rgcc")])
+
+[sub_resource type="Resource" id="Resource_g8fft"]
+script = ExtResource("11_v8t4v")
+area_rect = Rect2i(5, 2, 7, 7)
+once = false
+id = &"figure_flees_1"
+visible_if = "not has(\"badlands.figure_fled_1\")"
+on_step = Array[Resource]([SubResource("Resource_vdh6t"), SubResource("Resource_tr0mo"), SubResource("Resource_kjgus"), SubResource("Resource_pn6o6")])
+
+[sub_resource type="Resource" id="Resource_rnohy"]
+script = ExtResource("6_xvkdp")
+actor = "hooded_figure"
+
+[sub_resource type="Resource" id="Resource_c1v5o"]
+script = ExtResource("7_ksknh")
+actor = "hooded_figure"
+to = Vector3i(20, 9, 0)
+persist = true
+
+[sub_resource type="Resource" id="Resource_mjrg8"]
+script = ExtResource("8_v7sev")
+key = "badlands.figure_fled_2"
+
+[sub_resource type="Resource" id="Resource_b0r6q"]
+script = ExtResource("11_v8t4v")
+area_rect = Rect2i(12, 10, 7, 5)
+once = false
+id = &"figure_flees_2"
+visible_if = "has(\"badlands.figure_fled_1\") and not has(\"badlands.figure_fled_2\")"
+on_step = Array[Resource]([SubResource("Resource_rnohy"), SubResource("Resource_c1v5o"), SubResource("Resource_mjrg8")])
+
+[sub_resource type="Resource" id="Resource_hm3h2"]
+script = ExtResource("6_xvkdp")
+actor = "hooded_figure"
+
+[sub_resource type="Resource" id="Resource_fqkt4"]
+script = ExtResource("7_ksknh")
+actor = "hooded_figure"
+to = Vector3i(23, 9, 0)
+persist = true
+
+[sub_resource type="Resource" id="Resource_jswdk"]
+script = ExtResource("8_v7sev")
+key = "badlands.figure_entered"
+
+[sub_resource type="Resource" id="Resource_qkeb5"]
+script = ExtResource("9_otikv")
+text = "The figure slips into a cave in the cliffs."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_7l0bg"]
+script = ExtResource("10_i76iq")
+beats = Array[Resource]([SubResource("Resource_qkeb5")])
+
+[sub_resource type="Resource" id="Resource_slj1x"]
+script = ExtResource("11_v8t4v")
+area_rect = Rect2i(17, 7, 5, 5)
+once = false
+id = &"figure_flees_3"
+visible_if = "has(\"badlands.figure_fled_2\") and not has(\"badlands.figure_entered\")"
+on_step = Array[Resource]([SubResource("Resource_hm3h2"), SubResource("Resource_fqkt4"), SubResource("Resource_jswdk"), SubResource("Resource_7l0bg")])
+
+[sub_resource type="Resource" id="Resource_uwk6b"]
+script = ExtResource("12_k2ri0")
+area_rect = Rect2i(12, 0, 1, 1)
+target_area = &"redrock_village"
+target_entry = &"south_trail"
+id = &"north_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_vvvpc"]
+script = ExtResource("12_k2ri0")
+area_rect = Rect2i(23, 9, 1, 1)
+target_area = &"badlands_cave"
+target_entry = &"mouth"
+id = &"cave_exit"
+blocking = false
+
+[resource]
+script = ExtResource("13_qpnft")
+area_id = &"red_desert"
+display_name = "The Red Desert"
+terrain = ExtResource("14_s8uli")
+kind = 1
+region_id = &"rocky_badlands"
+world_map_pos = Vector2(0.8, 0.492)
+entry_points = {
+"cave_mouth": {
+"cell": [22, 9, 0],
+"facing": "west"
+},
+"north_trail": {
+"cell": [12, 1, 0],
+"facing": "south"
+}
+}
+entities = Array[Resource]([SubResource("Resource_wneio"), SubResource("Resource_sts66"), SubResource("Resource_6mdta"), SubResource("Resource_g8fft"), SubResource("Resource_b0r6q"), SubResource("Resource_slj1x"), SubResource("Resource_uwk6b"), SubResource("Resource_vvvpc")])
+encounter_zones = Array[Resource]([SubResource("Resource_0wso0")])
+level_band = Vector2i(22, 30)

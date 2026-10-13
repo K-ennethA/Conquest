@@ -102,6 +102,20 @@ const EL_HOLY := Color("f0c850")      # sun gold
 const EL_DARK := Color("a172e0")      # blight violet
 const EL_ARCANE := Color("b070e8")
 const EL_STEEL := Color("c9cbd6")
+## THE 15 TYPES (owner, 2026-10-12) -- one crest hue each, read through
+## [method ConquestTheme.element_color]. Fire, water, plant (= EL_NATURE), earth and metal
+## (= EL_STEEL) keep their established hues; the rest are new.
+const EL_BASIC := Color("bdb5a1")     # warm stone grey
+const EL_MARTIAL := Color("c2453f")   # brick red
+const EL_PLANT := EL_NATURE
+const EL_BUG := Color("a8c43a")       # leaf-beetle lime
+const EL_ELECTRIC := Color("f5d63b")  # spark yellow
+const EL_ICE := Color("7fe0e8")       # glacier cyan
+const EL_METAL := EL_STEEL
+const EL_POISON := Color("c45fd6")    # toxic magenta
+const EL_RADIANT := Color("fbe3a0")   # radiant pale gold
+const EL_GRIM := Color("7b5cc4")      # dusk violet
+const EL_DRAGON := Color("6f7cf0")    # wyrm indigo
 
 
 # --- Fonts -------------------------------------------------------------------

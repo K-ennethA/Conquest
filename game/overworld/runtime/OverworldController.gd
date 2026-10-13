@@ -44,6 +44,12 @@ const INTERIOR_FOCUS_SOUTH := 1.2
 ## Actor meta: this NPC wears a clone of the hero's model ([NpcLooks]), so it plays its walk / run
 ## clips at the hero's stride-matched rates ([method _feel_actor]).
 const HERO_STRIDES_META := &"hero_strides"
+## RIDING a travel move: how high the hero sits on his mount, and how long the mount is scaled to
+## (metres; a creature of any true size carries him at one readable size). PLACEHOLDER feel.
+const RIDE_LIFT := 0.55
+const RIDE_MOUNT_LENGTH := 1.7
+## SLIDING on an area's slide tiles (the ice dungeon): seconds per cell of the glide.
+const SLIDE_STEP_SECONDS := 0.09
 
 var story = null
 var area: OverworldAreaResource = null
@@ -90,6 +96,15 @@ var feel: Dictionary = {}
 var _mover: HeroMover = HeroMover.new()
 var _free_walking: bool = false
 var _tap_stall: float = 0.0
+## The TRAVEL field move the hero is riding ([member FieldMoveResource.travel_tiles] passable on
+## the grid; a mount under him), or null on foot. Not saved: an area that boots with the hero on
+## one of a ready travel move's tiles starts him riding ([method _resume_ride]).
+var _ride: FieldMoveResource = null
+## The area's weather on the overworld ([method _apply_area_weather]), and its id.
+var _weather_fx: WeatherFX = null
+var _weather_id: String = "clear"
+## True while the hero glides across an area's slide tiles ([method _slide]).
+var _sliding: bool = false
 
 
 func _ready() -> void:
@@ -171,6 +186,8 @@ func _build_world() -> void:
 		map_root.add_child(_interior_backdrop())
 
 	grid = OverworldGrid.build(area, _state)
+	# On the water with the sea move ready (a save at sea, a battle round trip): still riding.
+	_resume_ride()
 	# A saved / arrival cell the hero cannot stand on (an area that changed since the save, a cell
 	# now blocked) boots him at the area's default entry instead -- never off the map or in a wall.
 	var start: Dictionary = grid.resolve_start(area, _state.location_cell(), _state.location_facing())
@@ -210,6 +227,8 @@ func _build_world() -> void:
 	add_child(player)
 	player.place(_state.location_cell())
 	player.set_facing(OverworldEntity.facing_vector(_state.location_facing()))
+	if _ride != null:
+		_mount_ride(_ride)
 	_state.mark_visited(String(area.area_id))
 
 	camera = OverworldCamera.new()
@@ -241,6 +260,7 @@ func _build_world() -> void:
 	_dialogue.name = "OverworldDialogue"
 	_update_prompt()
 	refresh_quest_tracker()
+	_apply_area_weather()
 
 
 func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
@@ -267,6 +287,10 @@ func _make_entity_actor(e: OverworldEntity) -> OverworldActor:
 			&"sign":
 				if (e as SignEntity).look == "stone":
 					body = OverworldProps.standing_stone(e.tint)
+				elif (e as SignEntity).look == "note":
+					body = OverworldProps.note()
+				elif (e as SignEntity).look == "grave":
+					body = OverworldProps.gravestone(e.tint)
 				else:
 					body = OverworldProps.signpost(e.tint)
 			&"chest":
@@ -529,6 +553,9 @@ func _refresh_actor_states() -> void:
 		actor.visible = e.is_present(_state)
 		if e is ChestEntity:
 			OverworldProps.set_chest_open(actor.model(), (e as ChestEntity).is_opened(String(area.area_id), _state))
+		if e is NpcEntity:
+			var npc := e as NpcEntity
+			actor.set_asleep(npc.is_asleep(_state), npc.sleep_pose == "lie")
 
 
 func _on_script_finished(_stopped: bool, _reason: String) -> void:
@@ -857,6 +884,38 @@ func _overlay_open() -> bool:
 	return (journey != null and journey.is_open()) or InputActions.gameplay_input_blocked(get_tree())
 
 
+## Is there a present warp on [param c] (a hole in the ice: a slide stops on it and falls)?
+func _warp_cell(c: Vector3i) -> bool:
+	for e in area.present_entities(_state):
+		if e is WarpEntity and e.occupies(c):
+			return true
+	return false
+
+
+## GLIDE along [param path] (input held off), then arrive on its last cell as after any step -- its warp
+## (a hole), trigger, trainers and encounters -- without sliding on from it.
+func _slide(path: Array[Vector3i]) -> void:
+	_halt_free()
+	_busy = true
+	_sliding = true
+	var facing: String = OverworldEntity.facing_name(player.facing)
+	for c in path:
+		player.walk_to(c, SLIDE_STEP_SECONDS)
+		player.play_clip(OverworldActor.CLIP_IDLE)
+		await player.walk_finished
+		if not is_inside_tree():
+			return
+		story.note_player_position(c, facing)
+	_busy = false
+	_on_arrived(player.cell)
+	_sliding = false
+
+
+## True while the hero is sliding (tests).
+func is_sliding() -> bool:
+	return _sliding
+
+
 ## The present door on [param cell] (a building facade), or null.
 func door_at(cell: Vector3i) -> DoorEntity:
 	for e in area.present_entities(_state):
@@ -877,6 +936,134 @@ func enter_door(door: DoorEntity) -> bool:
 	return ok
 
 
+# =====================================================================================
+#  Riding a TRAVEL field move (the sea move, DECISIONS.md #43)
+# =====================================================================================
+
+## The shipped travel move whose tiles include [param cell]'s, or null.
+func _travel_move_at(cell: Vector3i) -> FieldMoveResource:
+	if grid == null or not grid.in_bounds(cell):
+		return null
+	var tid: StringName = grid.tile_id_at(cell)
+	if tid == &"":
+		return null
+	return FieldMoveResource.travel_move_for(tid)
+
+
+## Confirm facing [param cell]: a travel move's tile on foot -> its script (a hint while locked or
+## nobody knows it, else "Use <move>?"). True when something ran.
+func _try_travel(cell: Vector3i) -> bool:
+	if _ride != null:
+		return false
+	var fm: FieldMoveResource = _travel_move_at(cell)
+	if fm == null or grid.blocker_at(cell) != "":
+		return false
+	var ok: bool = story.run_script(RideFieldMoveCommand.script_for(fm, _state, cell), "")
+	_update_prompt()
+	return ok
+
+
+## Ride travel move [param move_id] out onto [param to] (the faced tile): the grid lets its tiles
+## pass, the first fit member who knows it carries the hero (a mount under him), and he steps out.
+## Awaitable (the ride command waits for the hop). Host method of [RideFieldMoveCommand].
+func start_ride(move_id: StringName, to: Vector3i) -> void:
+	var fm := FieldMoveResource.load_by_id(String(move_id))
+	if fm == null or not fm.is_travel() or player == null:
+		return
+	_mount_ride(fm)
+	if to != Cells.INVALID and to != player.cell:
+		await move_actor("player", to)
+
+
+## Step off: tiles block again, the mount goes. (Arriving on land does this.)
+func end_ride() -> void:
+	if _ride == null:
+		return
+	_ride = null
+	if grid != null:
+		grid.riding_tiles = []
+	if player != null:
+		player.clear_mount()
+
+
+## The ride currently under way (null on foot) -- tests, the HUD.
+func riding() -> FieldMoveResource:
+	return _ride
+
+
+func _mount_ride(fm: FieldMoveResource) -> void:
+	_ride = fm
+	grid.riding_tiles = fm.travel_tiles.duplicate()
+	if player == null:
+		return
+	var carrier: StoryPartyMember = null
+	var members: Array[StoryPartyMember] = fm.capable_members(_state)
+	if not members.is_empty():
+		carrier = members[0]
+	player.set_mount(_mount_model(carrier), RIDE_LIFT)
+
+
+## A boot on one of a READY travel move's tiles (a save on the water, a battle round trip at
+## sea, a warp between two stretches of sea) starts the hero riding before he is placed. Not
+## ready (the member who knows it fell): nothing -- the area's default entry takes him instead.
+func _resume_ride() -> void:
+	var cell: Vector3i = _state.location_cell()
+	var fm: FieldMoveResource = _travel_move_at(cell)
+	if fm != null and fm.status(_state) == FieldMoveResource.STATUS_READY:
+		_ride = fm
+		grid.riding_tiles = fm.travel_tiles.duplicate()
+
+
+## The mount for [param carrier]: its roster model scaled to [constant RIDE_MOUNT_LENGTH] across,
+## else a PLACEHOLDER procedural one (a creature-blue float).
+func _mount_model(carrier: StoryPartyMember) -> Node3D:
+	var root := Node3D.new()
+	root.name = "MountRoot"
+	var ch: CharacterResource = CharacterLibrary.get_character(StringName(carrier.character_id)) if carrier != null else null
+	var body: Node3D = null
+	if ch != null and ch.model_scene != null:
+		body = ch.model_scene.instantiate() as Node3D
+	if body != null:
+		body.rotation.y = deg_to_rad(ch.model_yaw_deg)
+		body.scale = Vector3.ONE * ch.model_scale
+		var holder := Node3D.new()
+		holder.add_child(body)
+		var box: AABB = _model_aabb(holder)
+		var span: float = maxf(box.size.x, box.size.z)
+		if span > 0.01:
+			holder.scale = Vector3.ONE * clampf(RIDE_MOUNT_LENGTH / span, 0.2, 3.0)
+		# The mount floats with its back about at the rider's seat: sink it into the water so its
+		# top sits at RIDE_LIFT.
+		var top: float = box.end.y * holder.scale.y
+		holder.position.y = RIDE_LIFT - top if top > RIDE_LIFT else 0.0
+		root.add_child(holder)
+	else:
+		root.add_child(OverworldProps.prop("boat", Vector2i.ONE, Color(0.3, 0.56, 0.74)))
+	root.add_child(OverworldProps.wake_ring())
+	return root
+
+
+## Local AABB of every mesh under [param n] (in [param n]'s space).
+static func _model_aabb(n: Node3D) -> AABB:
+	var out := AABB()
+	var first: bool = true
+	var stack: Array = [[n, Transform3D.IDENTITY]]
+	while not stack.is_empty():
+		var it: Array = stack.pop_back()
+		var node: Node = it[0]
+		var xf: Transform3D = it[1]
+		for c in node.get_children():
+			if not (c is Node3D):
+				continue
+			var cx: Transform3D = xf * (c as Node3D).transform
+			if c is VisualInstance3D:
+				var box: AABB = cx * (c as VisualInstance3D).get_aabb()
+				out = box if first else out.merge(box)
+				first = false
+			stack.append([c, cx])
+	return out
+
+
 ## True while the hero is mid-step.
 func is_moving() -> bool:
 	return _moving
@@ -885,6 +1072,9 @@ func is_moving() -> bool:
 func _on_arrived(cell: Vector3i) -> void:
 	story.note_player_position(cell, OverworldEntity.facing_name(player.facing))
 	_state.steps += 1
+	# Riding a travel move: stepping onto anything but its tiles (the shore) ends the ride.
+	if _ride != null and not grid.is_tile_in(cell, _ride.travel_tiles):
+		end_ride()
 	_update_prompt()
 	# 1. Warps.
 	for e in area.present_entities(_state):
@@ -906,6 +1096,13 @@ func _on_arrived(cell: Vector3i) -> void:
 				_tap_path.clear()
 				story.run_script(t.step_script(String(area.area_id)), String(t.id))
 				return
+	# 2b. Ice (an area's slide tiles): the hero keeps sliding the way he moved until something stops him.
+	if not _sliding and grid.is_tile_in(cell, area.slide_tiles):
+		var slide: Array[Vector3i] = grid.slide_path(cell, player.facing, area.slide_tiles, _warp_cell)
+		if not slide.is_empty():
+			_tap_path.clear()
+			_slide(slide)
+			return
 	# 3. Trainers.
 	if _check_trainers():
 		_tap_path.clear()
@@ -1020,7 +1217,8 @@ func entity_at(cell: Vector3i) -> OverworldEntity:
 		if not e.is_interactable_in(String(area.area_id)):
 			continue
 		var actor: OverworldActor = _actors.get(String(e.id), null)
-		if actor != null:
+		# A usable prop answers on every cell of its footprint (a bed's two cells), never moves.
+		if actor != null and not (e is PropEntity):
 			if actor.cell == cell:
 				return e
 		elif e.occupies(cell):
@@ -1038,9 +1236,10 @@ func interact() -> bool:
 		var creature: WildSpawner.WildCreature = wild.creature_at(faced_cell()) if wild != null else null
 		if creature != null:
 			return start_wild_battle(creature, WildSpawner.contact_opening(creature, player.cell))
-		return false
+		# Confirm at the water's edge (a TRAVEL field move's tile): ride out, or a hint.
+		return _try_travel(faced_cell())
 	var actor: OverworldActor = _actors.get(String(e.id), null)
-	if actor != null and (e is NpcEntity):
+	if actor != null and (e is NpcEntity) and not actor.is_asleep():
 		actor.face_cell(player.cell)
 	var speaker_id: String = ""
 	var speaker_name: String = e.display_name
@@ -1063,6 +1262,13 @@ func _update_prompt() -> void:
 	if e == null and wild != null and wild.creature_at(faced_cell()) != null and _can_fight_wild():
 		hud.set_prompt("Battle")
 		return
+	if e == null:
+		# The water's edge with the travel move ready: its verb ("Ride"). Nothing otherwise -- a
+		# shoreline is not a prompt until you can use it.
+		var fm: FieldMoveResource = _travel_move_at(faced_cell())
+		if fm != null and _ride == null and fm.status(_state) == FieldMoveResource.STATUS_READY:
+			hud.set_prompt(fm.travel_verb)
+			return
 	hud.set_prompt(e.prompt_verb() if e != null else "")
 
 
@@ -1423,6 +1629,32 @@ func refresh_world() -> void:
 		wild.register_blockers()
 	_refresh_actor_states()
 	_update_prompt()
+	_apply_area_weather()
+
+
+## THE AREA'S WEATHER on the overworld (story-driven: [method OverworldAreaResource.weather_id_for] --
+## the Snowy Peaks' post-game BLIZZARD, DECISIONS.md #99): a [WeatherFX] following the camera while it is
+## anything but clear. Purely a look; never mounted headless (no renderer), the id is still tracked.
+func _apply_area_weather() -> void:
+	var wid: String = area.weather_id_for(_state) if area != null else "clear"
+	if wid == _weather_id and (_weather_fx != null or wid == "clear"):
+		return
+	_weather_id = wid
+	if wid == "clear" or DisplayServer.get_name() == "headless":
+		if _weather_fx != null and is_instance_valid(_weather_fx):
+			_weather_fx.queue_free()
+		_weather_fx = null
+		return
+	if _weather_fx == null or not is_instance_valid(_weather_fx):
+		_weather_fx = WeatherFX.new()
+		_weather_fx.name = "WeatherFX"
+		add_child(_weather_fx)
+	_weather_fx.show_weather(Weather.get_weather(wid), true)
+
+
+## The weather the overworld shows here now (tests, the HUD).
+func area_weather() -> String:
+	return _weather_id
 
 
 func tile_under_player() -> String:

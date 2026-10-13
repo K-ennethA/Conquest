@@ -1,0 +1,82 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_uqgbl"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_s4rnc"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="3_ngop5"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="4_xy6bc"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="5_sjk7s"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/tides_cave_2/terrain.tres" id="6_csw7v"]
+
+[sub_resource type="Resource" id="Resource_l2shj"]
+script = ExtResource("2_s4rnc")
+character_id = &"mycothrall"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_023sr"]
+script = ExtResource("2_s4rnc")
+character_id = &"blightcap"
+weight = 1.5
+
+[sub_resource type="Resource" id="Resource_leng1"]
+script = ExtResource("2_s4rnc")
+character_id = &"vineweave"
+
+[sub_resource type="Resource" id="Resource_f65vh"]
+script = ExtResource("1_uqgbl")
+table = Array[Resource]([SubResource("Resource_l2shj"), SubResource("Resource_023sr"), SubResource("Resource_leng1")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_wukul"]
+script = ExtResource("3_ngop5")
+prop = "whirlpool"
+footprint = Vector2i(1, 1)
+id = &"whirl_down_swirl"
+cell = Vector3i(11, 3, 0)
+tint = Color(0.7, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Resource_mq5t1"]
+script = ExtResource("4_xy6bc")
+area_rect = Rect2i(11, 3, 1, 1)
+target_area = &"tides_cave_3"
+target_entry = &"whirl"
+arrival_toast = "The whirlpool drags you down into the dark..."
+id = &"whirl_down"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_gpcfq"]
+script = ExtResource("3_ngop5")
+prop = "hole"
+footprint = Vector2i(1, 1)
+id = &"hole_down_pit"
+cell = Vector3i(18, 7, 0)
+tint = Color(0.5, 0.56, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_f3nfb"]
+script = ExtResource("4_xy6bc")
+area_rect = Rect2i(18, 7, 1, 1)
+target_area = &"tides_cave_3"
+target_entry = &"east"
+id = &"hole_down"
+blocking = false
+
+[resource]
+script = ExtResource("5_sjk7s")
+area_id = &"tides_cave_2"
+display_name = "Cave of Tides"
+terrain = ExtResource("6_csw7v")
+kind = 3
+region_id = &"open_ocean"
+world_map_pos = Vector2(0.85, 0.81)
+entry_points = {
+"back_up": {
+"cell": [18, 9, 0],
+"facing": "south"
+},
+"whirl": {
+"cell": [12, 3, 0],
+"facing": "south"
+}
+}
+entities = Array[Resource]([SubResource("Resource_wukul"), SubResource("Resource_mq5t1"), SubResource("Resource_gpcfq"), SubResource("Resource_f3nfb")])
+encounter_zones = Array[Resource]([SubResource("Resource_f65vh")])
+level_band = Vector2i(12, 20)

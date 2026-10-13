@@ -1,0 +1,98 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_3suqq"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_taolq"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_px8h7"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_etysg"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_s4770"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="6_auxme"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="7_xg7fh"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="8_y7mqm"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/snowy_peaks/terrain.tres" id="9_sxuy3"]
+
+[sub_resource type="Resource" id="Resource_lqb01"]
+script = ExtResource("2_taolq")
+character_id = &"gem_knight"
+weight = 1.5
+
+[sub_resource type="Resource" id="Resource_6kmvc"]
+script = ExtResource("2_taolq")
+character_id = &"mycothrall"
+
+[sub_resource type="Resource" id="Resource_7epwc"]
+script = ExtResource("2_taolq")
+character_id = &"monster"
+
+[sub_resource type="Resource" id="Resource_iks3y"]
+script = ExtResource("1_3suqq")
+table = Array[Resource]([SubResource("Resource_lqb01"), SubResource("Resource_6kmvc"), SubResource("Resource_7epwc")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_bkjwj"]
+script = ExtResource("3_px8h7")
+text = "THE HIGH TRAIL
+South: Frostpeak Village."
+id = &"trail_sign"
+cell = Vector3i(12, 19, 0)
+display_name = "The Snowy Peaks"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_jaf46"]
+script = ExtResource("4_etysg")
+text = "A wall of packed ice and fallen rock seals what might once have been a cave. It will not budge."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_7u38c"]
+script = ExtResource("5_s4770")
+beats = Array[Resource]([SubResource("Resource_jaf46")])
+
+[sub_resource type="Resource" id="Resource_dib3e"]
+script = ExtResource("6_auxme")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"ice_seal"
+cell = Vector3i(17, 2, 0)
+tint = Color(0.72, 0.82, 0.92, 1)
+visible_if = "not (has(\"postgame.hidden_depths_awakened\"))"
+on_interact = Array[Resource]([SubResource("Resource_7u38c")])
+
+[sub_resource type="Resource" id="Resource_qsnpk"]
+script = ExtResource("7_xg7fh")
+area_rect = Rect2i(17, 2, 1, 1)
+target_area = &"glacier_cave"
+target_entry = &"mouth"
+id = &"cave_exit"
+blocking = false
+visible_if = "has(\"postgame.hidden_depths_awakened\")"
+
+[sub_resource type="Resource" id="Resource_yj4y5"]
+script = ExtResource("7_xg7fh")
+area_rect = Rect2i(11, 21, 1, 1)
+target_area = &"frostpeak_village"
+target_entry = &"north_trail"
+id = &"south_exit"
+blocking = false
+
+[resource]
+script = ExtResource("8_y7mqm")
+area_id = &"snowy_peaks"
+display_name = "The Snowy Peaks"
+terrain = ExtResource("9_sxuy3")
+kind = 1
+region_id = &"snowy_peaks"
+world_map_pos = Vector2(0.262, 0.105)
+entry_points = {
+"cave_mouth": {
+"cell": [17, 3, 0],
+"facing": "south"
+},
+"south_trail": {
+"cell": [11, 20, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_bkjwj"), SubResource("Resource_dib3e"), SubResource("Resource_qsnpk"), SubResource("Resource_yj4y5")])
+encounter_zones = Array[Resource]([SubResource("Resource_iks3y")])
+level_band = Vector2i(18, 26)
+weather_alt = "blizzard"
+weather_if = "has(\"postgame.hidden_depths_awakened\")"

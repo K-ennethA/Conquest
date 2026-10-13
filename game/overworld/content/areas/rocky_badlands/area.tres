@@ -1,0 +1,160 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_rhx4r"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_m4ore"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="3_d60am"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="4_0e14l"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="5_lswtc"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="6_4ks1f"]
+[ext_resource type="Script" path="res://game/ui/story/StoryScene.gd" id="7_i6igy"]
+[ext_resource type="Script" path="res://game/overworld/data/TrainerEntity.gd" id="8_7rkqw"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="9_jwkkc"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="10_r8gy0"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/rocky_badlands/terrain.tres" id="11_g4lpi"]
+
+[sub_resource type="Resource" id="Resource_dep7j"]
+script = ExtResource("2_m4ore")
+character_id = &"gem_knight"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_1uivv"]
+script = ExtResource("2_m4ore")
+character_id = &"monster"
+weight = 1.5
+
+[sub_resource type="Resource" id="Resource_21nii"]
+script = ExtResource("1_rhx4r")
+table = Array[Resource]([SubResource("Resource_dep7j"), SubResource("Resource_1uivv")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_kfsfm"]
+script = ExtResource("3_d60am")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_0"
+cell = Vector3i(5, 4, 0)
+tint = Color(0.58, 0.3, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_686dr"]
+script = ExtResource("3_d60am")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_1"
+cell = Vector3i(12, 12, 0)
+tint = Color(0.58, 0.3, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_yfahb"]
+script = ExtResource("3_d60am")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_2"
+cell = Vector3i(18, 5, 0)
+tint = Color(0.58, 0.3, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_csm3p"]
+script = ExtResource("3_d60am")
+prop = "boulder"
+footprint = Vector2i(1, 1)
+id = &"rock_3"
+cell = Vector3i(24, 12, 0)
+tint = Color(0.58, 0.3, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_c3otv"]
+script = ExtResource("4_0e14l")
+text = "EAST: REDROCK VILLAGE
+WEST: CROWNHAVEN"
+id = &"road_sign"
+cell = Vector3i(2, 6, 0)
+display_name = "The Redrock Road"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_sugrn"]
+script = ExtResource("5_lswtc")
+kind = 1
+opponent_name = "Prospector"
+opponent_speaker_id = &"npc_prospector"
+opponent_team = Array[Dictionary]([{
+"character_id": "gem_knight",
+"strength": 0.95
+}, {
+"character_id": "monster",
+"strength": 0.9
+}])
+reward_gold = 260
+clash_intro = true
+enemy_level = 23
+
+[sub_resource type="Resource" id="Resource_1ci3k"]
+script = ExtResource("6_4ks1f")
+speaker_id = &"self"
+side = &"right"
+text = "Fine, fine. Dig somewhere else."
+
+[sub_resource type="Resource" id="Resource_lkson"]
+script = ExtResource("7_i6igy")
+scene_id = &"badlands_prospector_after"
+beats = Array[Resource]([SubResource("Resource_1ci3k")])
+
+[sub_resource type="Resource" id="Resource_w0538"]
+script = ExtResource("6_4ks1f")
+speaker_id = &"self"
+side = &"right"
+text = "These mesas are mine to dig! Want to fight me for them?"
+
+[sub_resource type="Resource" id="Resource_kjps3"]
+script = ExtResource("7_i6igy")
+scene_id = &"badlands_prospector_pre"
+beats = Array[Resource]([SubResource("Resource_w0538")])
+
+[sub_resource type="Resource" id="Resource_06wfh"]
+script = ExtResource("8_7rkqw")
+sight_range = 3
+battle = SubResource("Resource_sugrn")
+pre_scene = SubResource("Resource_kjps3")
+defeated_scene = SubResource("Resource_lkson")
+speaker_id = &"npc_prospector"
+speaker_name = "Prospector"
+figure = "villager"
+id = &"prospector"
+cell = Vector3i(21, 10, 0)
+facing = "north"
+display_name = "Prospector"
+tint = Color(0.6, 0.44, 0.28, 1)
+
+[sub_resource type="Resource" id="Resource_l6es1"]
+script = ExtResource("9_jwkkc")
+area_rect = Rect2i(0, 7, 1, 1)
+target_area = &"crownhaven"
+target_entry = &"east_gate"
+id = &"west_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_howxc"]
+script = ExtResource("9_jwkkc")
+area_rect = Rect2i(31, 7, 1, 1)
+target_area = &"redrock_village"
+target_entry = &"west_road"
+id = &"east_exit"
+blocking = false
+
+[resource]
+script = ExtResource("10_r8gy0")
+area_id = &"rocky_badlands"
+display_name = "Rocky Badlands"
+terrain = ExtResource("11_g4lpi")
+kind = 1
+region_id = &"rocky_badlands"
+world_map_pos = Vector2(0.665, 0.398)
+entry_points = {
+"east_road": {
+"cell": [30, 7, 0],
+"facing": "west"
+},
+"west_road": {
+"cell": [1, 7, 0],
+"facing": "east"
+}
+}
+entities = Array[Resource]([SubResource("Resource_kfsfm"), SubResource("Resource_686dr"), SubResource("Resource_yfahb"), SubResource("Resource_csm3p"), SubResource("Resource_c3otv"), SubResource("Resource_06wfh"), SubResource("Resource_l6es1"), SubResource("Resource_howxc")])
+encounter_zones = Array[Resource]([SubResource("Resource_21nii")])
+level_band = Vector2i(22, 30)

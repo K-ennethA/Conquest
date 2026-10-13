@@ -53,9 +53,14 @@ enum Kind { CREATURE, HUMAN }
 ## Elemental TYPE for matchup effectiveness (Fire-Emblem / Pokemon style). Damage a
 ## unit deals/takes is scaled by [ElementChart] against a move's element and the tile
 ## it stands on. Empty = NEUTRAL: no matchup either way (the safe, unchanged default).
-## Use one vocabulary shared with move elements and tile elements: &"fire", &"water",
-## &"nature", &"wind", &"earth", &"holy", &"dark".
+## Use one vocabulary shared with move elements and tile elements -- THE 15 TYPES (owner,
+## 2026-10-12): &"basic", &"martial", &"fire", &"water", &"plant", &"bug", &"electric",
+## &"ice", &"wind", &"earth", &"metal", &"poison", &"radiant", &"grim", &"dragon".
 @export var element: StringName = &""
+## OPTIONAL SECOND TYPE (owner, 2026-10-12: creatures can have two). Empty = one type. Against
+## two types the matchup uses the step rule ([method ElementChartResource.multiplier_vs]);
+## standing on a tile of EITHER type counts as being at home.
+@export var element2: StringName = &""
 ## Free-form trait tags read by conditions ([UnitElementCondition]), e.g.
 ## &"sand_proof" (immune to Desert Storm chip damage). Empty by default.
 @export var tags: Array[StringName] = []

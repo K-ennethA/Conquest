@@ -270,6 +270,12 @@ const TIME_OF_DAY := {
 		"sun_color": Color(0.62, 0.7, 0.95), "sun_energy": 0.55, "ambient_energy": 0.28,
 		"sky_top": Color(0.08, 0.1, 0.2), "sky_horizon": Color(0.2, 0.24, 0.34), "haze": Color(0.16, 0.2, 0.28),
 	},
+	## A DREAM (Frostpeak's dream village, DECISIONS.md #95): a soft violet half-light with a rose
+	## horizon -- unreal, not night. PLACEHOLDER values (artist pass pending).
+	"Dream": {
+		"sun_color": Color(0.86, 0.74, 1.0), "sun_energy": 0.95, "ambient_energy": 0.5,
+		"sky_top": Color(0.3, 0.22, 0.52), "sky_horizon": Color(0.9, 0.64, 0.82), "haze": Color(0.62, 0.5, 0.76),
+	},
 }
 
 ## COLOUR GRADES layered on a time of day by a look preset's "grade" key (none = the
@@ -306,7 +312,7 @@ const GRADES := {
 	"warm": {
 		"tonemap_white": 3.0,
 		"light_trim": 0.8561,
-		"lut": {"Day": true, "Dawn": true, "Night": false},
+		"lut": {"Day": true, "Dawn": true, "Night": false, "Dream": false},
 		"Day": {
 			"sun_color": Color(1.0, 0.9, 0.72), "sun_energy": 1.29, "ambient_energy": 0.772,
 			"ambient_color": Color(1.0, 0.84, 0.68), "ambient_sky_contribution": 0.5,
@@ -324,6 +330,12 @@ const GRADES := {
 			"ambient_color": Color(0.5, 0.52, 0.85), "ambient_sky_contribution": 0.5,
 			"sky_top": Color(0.1, 0.12, 0.3), "sky_horizon": Color(0.24, 0.26, 0.42),
 			"ground_bottom": Color(0.16, 0.16, 0.24), "ground_horizon": Color(0.22, 0.24, 0.32),
+		},
+		"Dream": {
+			"sun_color": Color(0.86, 0.74, 1.0), "sun_energy": 0.8, "ambient_energy": 0.62,
+			"ambient_color": Color(0.82, 0.66, 0.96), "ambient_sky_contribution": 0.5,
+			"sky_top": Color(0.3, 0.22, 0.52), "sky_horizon": Color(0.9, 0.64, 0.82),
+			"ground_bottom": Color(0.4, 0.32, 0.5), "ground_horizon": Color(0.6, 0.48, 0.66),
 		},
 	},
 }
@@ -418,7 +430,7 @@ func setup(scene_root: Node) -> void:
 	WorldLookPresetCycler.attach(self)
 
 
-## Map lighting preset ("Day" default, "Dawn", "Dusk", "Night").
+## Map lighting preset ("Day" default, "Dawn", "Dusk", "Night", "Dream").
 ## Values come from TIME_OF_DAY, with the active look preset's grade layered on top.
 func apply_preset(preset: String) -> void:
 	_weather_base = {}  # the preset is the new un-weathered base
@@ -435,6 +447,8 @@ static func time_of_day_key(preset: String) -> String:
 	match preset:
 		"Night":
 			return "Night"
+		"Dream":
+			return "Dream"
 		"Dawn", "Dusk":
 			return "Dawn"
 	return "Day"

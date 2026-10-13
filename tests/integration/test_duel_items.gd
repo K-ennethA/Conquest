@@ -154,7 +154,7 @@ func test_the_story_gets_back_what_was_used() -> void:
 	br.kind = BattleRequest.KIND_DUEL
 	br.source = BattleRequest.SOURCE_WILD
 	br.encounter_id = "mossway.grass.petalfang"
-	br.party = [{"member_id": "vineweave", "character_id": "vineweave", "current_hp": 30, "item_id": ""}]
+	br.party = [{"member_id": "seedant", "character_id": "vineweave", "current_hp": 30, "item_id": ""}]
 	br.opponent = {"name": "Wild Petalfang", "team": [{"character_id": "petalfang", "strength": 1.0}]}
 	br.items = {"mossleaf_tonic": 3, "heartwood_charm": 1, "no_such_item": 2}
 	var conv := DuelRequest.from_battle_request(br.to_dict())
@@ -165,7 +165,7 @@ func test_the_story_gets_back_what_was_used() -> void:
 	var res := DuelResult.new()
 	res.outcome = DuelResult.OUTCOME_DEFEAT
 	res.items_used = {"mossleaf_tonic": 2}
-	res.party_after = [{"member_id": "vineweave", "current_hp": 0, "wounded": true}]
+	res.party_after = [{"member_id": "seedant", "current_hp": 0, "wounded": true}]
 	var result := BattleResult.from_dict(res.to_battle_result())
 	assert_eq(result.items_used, {"mossleaf_tonic": 2}, "the battle result carries them")
 	var s := StoryState.new()

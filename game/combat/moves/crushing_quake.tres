@@ -28,6 +28,7 @@ area_size = 2
 
 [resource]
 script = ExtResource("5_7ldny")
+element = &"basic"
 move_id = &"crushing_quake"
 display_name = "Crushing Quake"
 description = "Magic damage across a wide area; knocks enemies back and leaves rubble."

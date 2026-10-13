@@ -2,10 +2,13 @@
 
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
 [ext_resource type="PackedScene" path="res://game/characters/models/forest/shadow_assassin_forge.glb" id="2_model"]
+[ext_resource type="Resource" path="res://game/characters/weapons/library/iron_sword.tres" id="3_weapon"]
 
 [resource]
 script = ExtResource("1_char")
 character_id = &"shadow_assassin"
+element = &"basic"
+kind = 1
 display_name = "Shadow Assassin"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Wren pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")
@@ -19,3 +22,7 @@ base_speed = 12
 base_movement = 4
 attack_range = 1
 model_scale = 1.016
+; owner 2026-10-12 (roster page): Shadow Assassin is a HUMAN. PLACEHOLDER weapon iron_sword (no dagger type yet), proficiency sword.
+weapon = ExtResource("3_weapon")
+weapon_proficiencies = Array[StringName]([&"sword"])
+weapon_tendency = &"sword"

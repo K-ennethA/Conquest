@@ -3,18 +3,19 @@
 [ext_resource type="Script" path="res://game/characters/CharacterResource.gd" id="1_char"]
 [ext_resource type="PackedScene" path="res://game/characters/models/dark/mortis_forge.glb" id="2_model"]
 [ext_resource type="Script" path="res://game/combat/MoveResource.gd" id="3_mvres"]
-[ext_resource type="Resource" path="res://game/combat/moves/wither_bolt.tres" id="4_wither"]
 [ext_resource type="Resource" path="res://game/combat/moves/grave_grasp.tres" id="5_grasp"]
 [ext_resource type="Resource" path="res://game/combat/moves/soul_drain.tres" id="6_drain"]
 [ext_resource type="Resource" path="res://game/combat/moves/undying_legion.tres" id="7_legion"]
 [ext_resource type="Script" path="res://game/abilities/AbilityResource.gd" id="8_abres"]
 [ext_resource type="Resource" path="res://game/abilities/reanimate.tres" id="9_reanimate"]
 [ext_resource type="Resource" path="res://game/movement/profiles/ground_standard.tres" id="10_mvprof"]
+[ext_resource type="Resource" path="res://game/characters/weapons/library/oak_staff.tres" id="20_weapon"]
 
 [resource]
 script = ExtResource("1_char")
 character_id = &"necromancer"
-element = &"dark"
+element = &"grim"
+kind = 1
 display_name = "Mortis"
 description = "A gravecaller who wages war with your own dead. Every soldier he cuts down rises again at his side, so the longer the battle drags on, the larger his silent army grows."
 model_scene = ExtResource("2_model")
@@ -27,6 +28,10 @@ base_speed = 11
 base_movement = 4
 attack_range = 3
 movement_profile = ExtResource("10_mvprof")
-moveset = Array[ExtResource("3_mvres")]([ExtResource("4_wither"), ExtResource("5_grasp"), ExtResource("6_drain"), ExtResource("7_legion")])
+moveset = Array[ExtResource("3_mvres")]([ExtResource("5_grasp"), ExtResource("6_drain"), ExtResource("7_legion")])
 abilities = Array[ExtResource("8_abres")]([ExtResource("9_reanimate")])
 model_scale = 1.04405
+; owner 2026-10-12 (roster page): Mortis is a HUMAN of the grim type. A human fields at most 3 specials after the weapon attack, so Wither Bolt (now covered by the staff strike) left the kit: Grave Grasp, Soul Drain, Undying Legion (raises Rotwights) + Reanimate; PLACEHOLDER weapon oak_staff, proficiencies staff + tome.
+weapon = ExtResource("20_weapon")
+weapon_proficiencies = Array[StringName]([&"staff", &"tome"])
+weapon_tendency = &"staff"

@@ -7,6 +7,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"elias"
+element = &"basic"
 kind = 1
 display_name = "Elias"
 description = "PLACEHOLDER -- a HUMAN: channels through his staff (weapon attack); no special moves or abilities yet. Default stats cloned from Mortis pending rebalance."

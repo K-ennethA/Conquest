@@ -1,0 +1,344 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_syaqg"]
+[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_ks1du"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_scxj5"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="4_ofba6"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/BondLegendCommand.gd" id="5_ughag"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="6_5s5yo"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="7_m11yh"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="8_h8ti3"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="9_fmuym"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="10_ccp0j"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="11_i0hoj"]
+[ext_resource type="Script" path="res://game/overworld/data/DoorEntity.gd" id="12_b6dok"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="13_kgfti"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="14_0bii6"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/frostpeak_village/terrain.tres" id="15_aq1u5"]
+
+[sub_resource type="Resource" id="Resource_qktvl"]
+script = ExtResource("1_syaqg")
+footprint = Vector2i(4, 3)
+enterable = true
+door_offset = Vector2i(1, 2)
+id = &"fp_inn"
+cell = Vector3i(4, 4, 0)
+tint = Color(0.4, 0.34, 0.42, 1)
+
+[sub_resource type="Resource" id="Resource_mryhy"]
+script = ExtResource("1_syaqg")
+prop = "cabin"
+footprint = Vector2i(5, 3)
+id = &"saevi_lodge"
+cell = Vector3i(14, 2, 0)
+tint = Color(0.36, 0.26, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_6xy6i"]
+script = ExtResource("1_syaqg")
+prop = "cabin"
+footprint = Vector2i(3, 2)
+enterable = true
+door_offset = Vector2i(1, 1)
+id = &"fp_house"
+cell = Vector3i(3, 12, 0)
+tint = Color(0.36, 0.3, 0.34, 1)
+
+[sub_resource type="Resource" id="Resource_inxos"]
+script = ExtResource("1_syaqg")
+prop = "cabin"
+footprint = Vector2i(3, 2)
+id = &"fp_cabin_0"
+cell = Vector3i(17, 12, 0)
+tint = Color(0.36, 0.3, 0.34, 1)
+
+[sub_resource type="Resource" id="Resource_drknp"]
+script = ExtResource("1_syaqg")
+prop = "cabin"
+footprint = Vector2i(3, 2)
+id = &"fp_cabin_1"
+cell = Vector3i(18, 6, 0)
+tint = Color(0.3, 0.32, 0.4, 1)
+
+[sub_resource type="Resource" id="Resource_efmdp"]
+script = ExtResource("1_syaqg")
+prop = "banner"
+footprint = Vector2i(1, 1)
+id = &"banner_lodge"
+cell = Vector3i(13, 4, 0)
+tint = Color(0.36, 0.26, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_6eg40"]
+script = ExtResource("1_syaqg")
+prop = "logs"
+footprint = Vector2i(2, 1)
+id = &"woodpile"
+cell = Vector3i(5, 17, 0)
+tint = Color(0.5, 0.38, 0.26, 1)
+
+[sub_resource type="Resource" id="Resource_jhmu2"]
+script = ExtResource("1_syaqg")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"lamp_10_12"
+cell = Vector3i(10, 12, 0)
+tint = Color(1, 0.82, 0.45, 1)
+
+[sub_resource type="Resource" id="Resource_5gyui"]
+script = ExtResource("1_syaqg")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"lamp_12_7"
+cell = Vector3i(12, 7, 0)
+tint = Color(1, 0.82, 0.45, 1)
+
+[sub_resource type="Resource" id="Resource_yppqa"]
+script = ExtResource("2_ks1du")
+id = &"wayshrine"
+cell = Vector3i(8, 11, 0)
+display_name = "Frostpeak Wayshrine"
+tint = Color(0.55, 0.92, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_if14v"]
+script = ExtResource("3_scxj5")
+text = "FROSTPEAK VILLAGE
+South: the trail down to Woodland Town."
+id = &"village_sign"
+cell = Vector3i(12, 17, 0)
+display_name = "Frostpeak Village"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_kj1uf"]
+script = ExtResource("4_ofba6")
+speaker_id = &"npc_fp_watch"
+speaker_name = "Trail Watch"
+figure = "guard"
+asleep_if = "not has(\"frostpeak.awake\")"
+id = &"fp_watch"
+cell = Vector3i(12, 17, 0)
+display_name = "Trail Watch"
+tint = Color(0.46, 0.42, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_hw6bv"]
+script = ExtResource("4_ofba6")
+speaker_id = &"npc_fp_elder"
+speaker_name = "Frostpeak Elder"
+figure = "elder"
+asleep_if = "not has(\"frostpeak.awake\")"
+id = &"fp_elder"
+cell = Vector3i(9, 7, 0)
+facing = "east"
+display_name = "Frostpeak Elder"
+tint = Color(0.46, 0.42, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_4csm5"]
+script = ExtResource("4_ofba6")
+speaker_id = &"npc_fp_hunter"
+speaker_name = "Frostpeak Hunter"
+figure = "trainer"
+asleep_if = "not has(\"frostpeak.awake\")"
+id = &"fp_hunter"
+cell = Vector3i(20, 10, 0)
+facing = "west"
+display_name = "Frostpeak Hunter"
+tint = Color(0.46, 0.42, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_7mu5q"]
+script = ExtResource("4_ofba6")
+speaker_id = &"npc_fp_woodcutter"
+speaker_name = "Woodcutter"
+figure = "villager"
+asleep_if = "not has(\"frostpeak.awake\")"
+id = &"fp_woodcutter"
+cell = Vector3i(6, 16, 0)
+facing = "north"
+display_name = "Woodcutter"
+tint = Color(0.46, 0.42, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_lci34"]
+script = ExtResource("4_ofba6")
+speaker_id = &"npc_fp_child"
+speaker_name = "Frostpeak Child"
+figure = "child"
+asleep_if = "not has(\"frostpeak.awake\")"
+id = &"fp_child"
+cell = Vector3i(14, 12, 0)
+display_name = "Frostpeak Child"
+tint = Color(0.46, 0.42, 0.5, 1)
+
+[sub_resource type="Resource" id="Resource_oaybj"]
+script = ExtResource("4_ofba6")
+speaker_id = &"npc_saevi"
+speaker_name = "Saevi"
+figure = "elder"
+body = "female"
+asleep_if = "not has(\"frostpeak.awake\")"
+id = &"saevi"
+cell = Vector3i(16, 5, 0)
+display_name = "Saevi"
+tint = Color(0.32, 0.24, 0.44, 1)
+
+[sub_resource type="Resource" id="Resource_3h61d"]
+script = ExtResource("5_ughag")
+character_id = &"eclipse_wolf"
+
+[sub_resource type="Resource" id="Resource_ntguq"]
+script = ExtResource("6_5s5yo")
+key = "mythic.nightmare.bonded"
+
+[sub_resource type="Resource" id="Resource_b63nc"]
+script = ExtResource("7_m11yh")
+
+[sub_resource type="Resource" id="Resource_856lg"]
+script = ExtResource("8_h8ti3")
+label = "Bond"
+commands = Array[Resource]([SubResource("Resource_3h61d"), SubResource("Resource_ntguq"), SubResource("Resource_b63nc")])
+
+[sub_resource type="Resource" id="Resource_0kywn"]
+script = ExtResource("8_h8ti3")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_fhbt5"]
+script = ExtResource("9_fmuym")
+text = "Fleecefang watches you, calm now. Bond with it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_fr7uf"]
+script = ExtResource("10_ccp0j")
+prompt = SubResource("Resource_fhbt5")
+options = Array[Resource]([SubResource("Resource_856lg"), SubResource("Resource_0kywn")])
+
+[sub_resource type="Resource" id="Resource_4nrwt"]
+script = ExtResource("4_ofba6")
+speaker_name = "Fleecefang"
+id = &"nightmare"
+cell = Vector3i(14, 15, 0)
+display_name = "Fleecefang"
+visual_character = &"eclipse_wolf"
+visible_if = "has(\"frostpeak.dream_won\") and not has(\"mythic.nightmare.bonded\")"
+on_interact = Array[Resource]([SubResource("Resource_fr7uf")])
+
+[sub_resource type="Resource" id="Resource_ec5uf"]
+script = ExtResource("5_ughag")
+character_id = &"gem_knight"
+
+[sub_resource type="Resource" id="Resource_2pqvr"]
+script = ExtResource("6_5s5yo")
+key = "mythic.dreamer.bonded"
+
+[sub_resource type="Resource" id="Resource_fed23"]
+script = ExtResource("7_m11yh")
+
+[sub_resource type="Resource" id="Resource_6hmsh"]
+script = ExtResource("8_h8ti3")
+label = "Bond"
+commands = Array[Resource]([SubResource("Resource_ec5uf"), SubResource("Resource_2pqvr"), SubResource("Resource_fed23")])
+
+[sub_resource type="Resource" id="Resource_jnrya"]
+script = ExtResource("8_h8ti3")
+label = "Not now"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_v8p07"]
+script = ExtResource("9_fmuym")
+text = "Geode watches you, calm now. Bond with it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_dfit0"]
+script = ExtResource("10_ccp0j")
+prompt = SubResource("Resource_v8p07")
+options = Array[Resource]([SubResource("Resource_6hmsh"), SubResource("Resource_jnrya")])
+
+[sub_resource type="Resource" id="Resource_vqcc3"]
+script = ExtResource("4_ofba6")
+speaker_name = "Geode"
+id = &"dreamer"
+cell = Vector3i(19, 15, 0)
+display_name = "Geode"
+visual_character = &"gem_knight"
+visible_if = "has(\"frostpeak.dream_won\") and not has(\"mythic.dreamer.bonded\")"
+on_interact = Array[Resource]([SubResource("Resource_dfit0")])
+
+[sub_resource type="Resource" id="Resource_ymeo3"]
+script = ExtResource("11_i0hoj")
+area_rect = Rect2i(11, 19, 1, 1)
+target_area = &"woodland_town"
+target_entry = &"north_trail"
+id = &"south_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_7ivmc"]
+script = ExtResource("11_i0hoj")
+area_rect = Rect2i(11, 0, 1, 1)
+target_area = &"snowy_peaks"
+target_entry = &"south_trail"
+id = &"north_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_bpbgc"]
+script = ExtResource("12_b6dok")
+building = &"fp_inn"
+area_rect = Rect2i(5, 6, 1, 1)
+target_area = &"frostpeak_inn"
+target_entry = &"door"
+id = &"door_fp_inn"
+cell = Vector3i(5, 6, 0)
+display_name = "Frostpeak Inn"
+tint = Color(0.4, 0.34, 0.42, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_rlycu"]
+script = ExtResource("12_b6dok")
+building = &"fp_house"
+area_rect = Rect2i(4, 13, 1, 1)
+target_area = &"frostpeak_house"
+target_entry = &"door"
+id = &"door_fp_house"
+cell = Vector3i(4, 13, 0)
+display_name = "Frostpeak House"
+tint = Color(0.36, 0.3, 0.34, 1)
+blocking = false
+
+[sub_resource type="Resource" id="Resource_15482"]
+script = ExtResource("6_5s5yo")
+key = "frostpeak.arrived"
+
+[sub_resource type="Resource" id="Resource_j0r11"]
+script = ExtResource("13_kgfti")
+condition = "not has(\"frostpeak.arrived\")"
+then_commands = Array[Resource]([SubResource("Resource_15482")])
+
+[resource]
+script = ExtResource("14_0bii6")
+area_id = &"frostpeak_village"
+display_name = "Frostpeak Village"
+terrain = ExtResource("15_aq1u5")
+region_id = &"snowy_peaks"
+world_map_pos = Vector2(0.231, 0.166)
+entry_points = {
+"door_fp_house": {
+"cell": [4, 14, 0],
+"facing": "south"
+},
+"door_fp_inn": {
+"cell": [5, 7, 0],
+"facing": "south"
+},
+"north_trail": {
+"cell": [11, 1, 0],
+"facing": "south"
+},
+"south_trail": {
+"cell": [11, 18, 0],
+"facing": "north"
+},
+"wayshrine": {
+"cell": [8, 12, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_qktvl"), SubResource("Resource_mryhy"), SubResource("Resource_6xy6i"), SubResource("Resource_inxos"), SubResource("Resource_drknp"), SubResource("Resource_efmdp"), SubResource("Resource_6eg40"), SubResource("Resource_jhmu2"), SubResource("Resource_5gyui"), SubResource("Resource_yppqa"), SubResource("Resource_if14v"), SubResource("Resource_kj1uf"), SubResource("Resource_hw6bv"), SubResource("Resource_4csm5"), SubResource("Resource_7mu5q"), SubResource("Resource_lci34"), SubResource("Resource_oaybj"), SubResource("Resource_4nrwt"), SubResource("Resource_vqcc3"), SubResource("Resource_ymeo3"), SubResource("Resource_7ivmc"), SubResource("Resource_bpbgc"), SubResource("Resource_rlycu")])
+on_enter = Array[Resource]([SubResource("Resource_j0r11")])
+level_band = Vector2i(18, 26)
+weather_alt = "blizzard"
+weather_if = "has(\"postgame.hidden_depths_awakened\")"

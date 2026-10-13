@@ -58,9 +58,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(9, 0),
-"tile_id": "sacred_meadow",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
-"tile_type": "SACRED_GROUND"
+"tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 0),
 "tile_id": "tree",
@@ -153,9 +153,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(9, 1),
-"tile_id": "sacred_meadow",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
-"tile_type": "SACRED_GROUND"
+"tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 1),
 "tile_id": "tree",
@@ -248,9 +248,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "NORMAL"
 }, {
 "position": Vector2i(9, 2),
-"tile_id": "sacred_meadow",
+"tile_id": "forest_dirt",
 "tile_resource_path": "",
-"tile_type": "SACRED_GROUND"
+"tile_type": "NORMAL"
 }, {
 "position": Vector2i(10, 2),
 "tile_id": "grass_plains",
@@ -688,9 +688,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(2, 7),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(3, 7),
 "tile_id": "tree",
@@ -758,9 +758,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 7),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(17, 7),
 "tile_id": "tree",
@@ -878,9 +878,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(2, 9),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(3, 9),
 "tile_id": "tree",
@@ -948,9 +948,9 @@ tile_layout = Array[Dictionary]([{
 "tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(16, 9),
-"tile_id": "grass_plains",
+"tile_id": "tree",
 "tile_resource_path": "",
-"tile_type": "NORMAL"
+"tile_type": "DIFFICULT_TERRAIN"
 }, {
 "position": Vector2i(17, 9),
 "tile_id": "tree",

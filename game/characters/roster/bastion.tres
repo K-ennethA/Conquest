@@ -27,3 +27,5 @@ default_ai_stance = "defensive"
 default_aggro_range = 1
 default_leash_radius = 0
 moveset = Array[ExtResource("3_mvres")]([ExtResource("4_ward")])
+; owner 2026-10-12: Bastion is not a creature (it was a temp one). It stays ONLY as the Destroy Base structure (DestroyBase.base_character_ids, Kings Crossing / Riftwood); never catchable, hidden from the compendium.
+catch_rate = 0.0

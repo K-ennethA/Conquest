@@ -31,6 +31,17 @@ extends OverworldEntity
 ##   smithy    a forge house: glowing forge mouth, chimney, anvil
 ##   scarecrow a field scarecrow
 ##   mat       an interior's exit mat: a rug on the floor (walk-over)
+##   bed       a bed along the footprint's long axis, pillow at the north end (an inn, a house)
+##   boulder   a big weathered rock in [member OverworldEntity.tint] (badlands, a sealed cave mouth)
+##   palm      a leaning palm tree (the coast)
+##   boat      a beached rowing boat (the coast)
+##   tent      a canvas tent (a camp, the hideout)
+##   tomb      an OPENED tomb: the slab pushed aside over steps down into the dark (walk-over: a warp
+##             on it leads below)
+##   hole      a dark pit in the floor (walk-over: a warp on it drops you a level, or back)
+##   roots     great roots across the ground (walk-over; the Deep Woods' right way)
+##   great_tree a massive old trunk (the Deep Woods' right way)
+##   whirlpool a swirl on the water (walk-over: a warp on it pulls you down)
 ##
 ## [member OverworldEntity.cell] is the footprint's top-left cell; [member footprint] its size.
 ## COLLISION is per KIND: [constant SOLID_KINDS] (a cart, barrels, a well, a stall, fences,
@@ -42,10 +53,10 @@ extends OverworldEntity
 
 const KINDS: Array[String] = ["house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well",
 	"fence", "haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena",
-	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat", "thicket"]
+	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat", "thicket", "bed", "boulder", "palm", "boat", "tent", "tomb", "hole", "roots", "great_tree", "whirlpool"]
 
 @export_enum("house", "ruin", "keep", "tower", "gate", "windmill", "stall", "well", "fence",
-	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena", "cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat", "thicket")
+	"haystack", "barrels", "cart", "crops", "banner", "dummy", "crystal", "fire", "rubble", "arena", "cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "mat", "thicket", "bed", "boulder", "palm", "boat", "tent", "tomb", "hole", "roots", "great_tree", "whirlpool")
 var prop: String = "house"
 @export var footprint: Vector2i = Vector2i(2, 2)
 ## "auto" = the kind's default ([constant SOLID_KINDS]); "solid" / "walkable" override it.
@@ -61,12 +72,16 @@ var prop: String = "house"
 ## part glows in [member OverworldEntity.tint] -- an emissive head plus a light of this energy
 ## ([method OverworldProps.add_glow]). A look, never collision. E.g. the Deep Woods' maze lanterns.
 @export_range(0.0, 8.0, 0.1) var glow: float = 0.0
+## A USABLE prop: with [member OverworldEntity.on_interact] set, facing ANY cell of its footprint and
+## pressing Confirm runs it (a bed you rest in, a rock wall you speak to); this is the HUD verb.
+## Without on_interact a prop is pure scenery, as before.
+@export var verb: String = "Check"
 
 ## Kinds that block their whole footprint unless [member collision] says "walkable". Walk-over
 ## decor (crops) and arches the player walks under (gate) are deliberately absent.
 const SOLID_KINDS: Array[String] = ["house", "ruin", "keep", "tower", "windmill", "stall", "well",
 	"fence", "haystack", "barrels", "cart", "banner", "dummy", "crystal", "fire", "rubble", "arena",
-	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow"]
+	"cabin", "logs", "lamp", "chapel", "smithy", "scarecrow", "bed", "boulder", "palm", "boat", "tent", "great_tree"]
 
 
 func kind() -> StringName:
@@ -74,7 +89,11 @@ func kind() -> StringName:
 
 
 func is_interactable() -> bool:
-	return false
+	return not on_interact.is_empty()
+
+
+func prompt_verb() -> String:
+	return verb if not verb.strip_edges().is_empty() else "Check"
 
 
 ## Does this prop block its footprint? The kind's default, unless [member collision] overrides it.

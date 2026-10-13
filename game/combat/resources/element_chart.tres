@@ -4,118 +4,145 @@
 
 [resource]
 script = ExtResource("1_elchart")
-elements = Array[StringName]([&"fire", &"water", &"nature", &"wind", &"earth", &"holy", &"dark"])
+elements = Array[StringName]([&"basic", &"martial", &"fire", &"water", &"plant", &"bug", &"electric", &"ice", &"wind", &"earth", &"metal", &"poison", &"radiant", &"grim", &"dragon"])
 default_multiplier = 1.0
 matrix = {
-&"dark": {
-&"dark": 0.75,
-&"holy": 1.25
+&"radiant": {
+&"radiant": 0.75,
+&"dragon": 1.25,
+&"grim": 1.25,
+&"martial": 1.25,
+&"metal": 0.75
+},
+&"basic": {
+&"grim": 0.75,
+&"metal": 0.75
+},
+&"bug": {
+&"radiant": 1.25,
+&"bug": 0.75,
+&"fire": 0.75,
+&"grim": 1.25,
+&"metal": 0.75,
+&"plant": 1.25
+},
+&"dragon": {
+&"dragon": 1.25
 },
 &"earth": {
 &"earth": 0.75,
-&"water": 1.25
+&"electric": 1.25,
+&"fire": 1.25,
+&"metal": 1.25,
+&"poison": 1.25
+},
+&"electric": {
+&"dragon": 0.75,
+&"earth": 0.75,
+&"electric": 0.75,
+&"plant": 0.75,
+&"water": 1.25,
+&"wind": 1.25
 },
 &"fire": {
+&"bug": 1.25,
+&"dragon": 0.75,
 &"fire": 0.75,
-&"nature": 1.25
+&"ice": 1.25,
+&"metal": 1.25,
+&"plant": 1.25,
+&"water": 0.75
 },
-&"holy": {
-&"dark": 1.25,
-&"holy": 0.75
+&"grim": {
+&"radiant": 1.25,
+&"grim": 1.25
 },
-&"nature": {
-&"fire": 1.25,
-&"nature": 0.75
+&"ice": {
+&"dragon": 1.25,
+&"earth": 1.25,
+&"ice": 0.75,
+&"plant": 1.25,
+&"wind": 1.25
+},
+&"martial": {
+&"basic": 1.25,
+&"earth": 1.25,
+&"grim": 0.75,
+&"ice": 1.25,
+&"martial": 0.75,
+&"metal": 1.25
+},
+&"metal": {
+&"dragon": 1.25,
+&"ice": 1.25,
+&"metal": 0.75
+},
+&"plant": {
+&"dragon": 0.75,
+&"earth": 1.25,
+&"fire": 0.75,
+&"metal": 0.75,
+&"plant": 0.75,
+&"water": 1.25
+},
+&"poison": {
+&"radiant": 0.75,
+&"bug": 1.25,
+&"earth": 0.75,
+&"metal": 0.75,
+&"plant": 1.25,
+&"poison": 0.75
 },
 &"water": {
+&"dragon": 0.75,
 &"earth": 1.25,
+&"fire": 1.25,
+&"plant": 0.75,
 &"water": 0.75
 },
 &"wind": {
+&"bug": 1.25,
+&"electric": 0.75,
+&"martial": 1.25,
 &"wind": 0.75
 }
 }
-notes = "SEEDED MATCHUPS -- the framework's starting numbers. Balancing is content work:
-edit the floats here, not the code.
+notes = "THE 15 TYPES (owner, 2026-10-12 -- docs/design/DECISIONS.md). Balancing is content work:
+edit the floats here, not the code. 1.25 = strong, 0.75 = resisted, unlisted = neutral (1.0).
 
-TWO RULES generated every entry below.
+RENAMES from the first seven: nature -> plant, dark -> grim (dark and ghost merged into one
+type), holy -> radiant, and \"no element\" -> basic. New: basic, martial, bug, electric, ice,
+metal, poison, dragon.
 
-1. EVERY ELEMENT RESISTS ITSELF -- 0.75.
-   fire>fire, water>water, nature>nature, wind>wind, earth>earth, holy>holy,
-   dark>dark. Seven entries. A unit is hardest to hurt with its own element, so
-   a mirror match is decided by play rather than by the chart.
+OWNER CALLS on the chart (2026-10-12), beyond the obvious ones:
+  earth beats metal (\"add the earth weakness to metal\");
+  metal beats dragon (the knight in the fairy tale) and RESISTS radiant rather than beating it;
+  radiant resists poison (too pure to be corrupted);
+  bug beats radiant;
+  plant and bug are separate types; grim hits grim hard (spirits harm spirits).
 
-2. OPPOSITE PAIRS ARE STRONG BOTH WAYS -- 1.25, authored in both directions.
-   fire <-> nature   (flame burns wood; green chokes out flame)
-   water <-> earth   (water erodes stone; earth dams water)
-   holy <-> dark     (the classic opposition)
-   Six entries -- each pair is listed once per direction, never inferred.
+TWO TYPES (owner, 2026-10-12: \"like Pokémon logic\"): see dual_step_multipliers. Each of a
+defender's two types is a step (+1 strong, -1 resisted, 0 neutral); the steps add: +2 -> 1.5,
++1 -> 1.25, 0 -> 1.0 (a weakness and a resist cancel), -1 -> 0.75, -2 -> 0.5.
 
-   fire<->nature is the pair with live content today (18 nature moves, 6 nature
-   characters, 1 fire move) and it is the matchup the existing design already
-   leaned on -- Ember Storm into the tree boss. water<->earth is half-live (4
-   earth moves, 2 earth characters, no water content yet).
+TILE ELEMENTS -- tile_elements below is THE authority. Ice is now its own type, so the frozen
+surface (slippery_ice) is ice; grass, vines and the sacred meadow are plant; Duskmaw's void
+spot is grim; lava / vents / scorch are fire; deep water, the empowering current and the
+fountain are water; fortify and rubble are earth.
 
-WIND has no opposite. It is the one element with NO content at all -- no move and
-no character carries it -- so pairing it now would be inventing balance for
-something that does not exist. It self-resists and is otherwise neutral. Give it
-an opposite when wind content is authored.
+SACRED MEADOW IS PLANT, NOT RADIANT: a living, growing place whose heal runs stronger for the
+plant creatures that belong in it. THE FOUNTAIN IS WATER: it sits in a symmetric base pocket,
+so its heal must be identical for both sides.
 
-EVERYTHING ELSE IS NEUTRAL (1.0), including every element this file has never
-heard of. Unlisted is not an error: a move or character authored with a brand new
-element simply plays neutral until someone adds its row here.
-
-TILE ELEMENTS -- `tile_elements` below is THE authority (see its own doc). Every
-tile effect that ships today is assigned:
-
-  fire            -> fire     (lava's burn)
-  scorching_vent  -> fire     (volcanic vent)
-  molten_lava     -> fire     (tile id, for terrain that grows its own effect)
-  magma_vent      -> fire     (tile id)
-  scorched        -> fire     (the rule flag scorching_vent raises)
-  empowering_water-> water    (deep water's aquatic buff)
-  slippery_ice    -> water    (frozen surface)
-  deep_water      -> water    (tile id)
-  fountain        -> water    (a base's healing spring -- see below)
-  tall_grass      -> nature   (concealing grass)
-  vine_trap       -> nature   (Petalfang's snare)
-  fortify         -> earth    (sacred ground's dug-in defence)
-  rock_rubble     -> earth    (broken stone)
-  sacred_meadow   -> nature   (see below)
-  void_spot       -> dark     (Duskmaw's teleport anchor)
-
-VOID_SPOT IS ELEMENTED THOUGH IT DOES NOTHING. It carries no damage and no magnitude, so
-every element path resolves to nothing for it today -- but unlike `stealth` (which is
-deliberately elementless because an element there would colour a badge and change
-nothing) a void spot is a MOVE'S OWN MARK and reads as the caster's element on every
-surface that badges a cell. Elementing it is what keeps the tile badge, the terrain panel
-and the move that planted it all saying "dark".
-
-SACRED MEADOW IS NATURE, NOT HOLY -- an authored design call, recorded here because
-the name argues the other way. The meadow is a living, growing place that heals,
-and its heal is meant to run STRONGER for the nature creatures that belong in it
-(the own_tile_effect_bonus path): 10 HP becomes 13 for a nature occupant, and
-everyone else -- including a holy one -- gets the authored 10. Elementing it holy
-would have handed that affinity to a roster that has no nature relationship with
-the ground it is standing on.
-
-THE FOUNTAIN IS WATER, NOT HOLY -- and the reason is the opposite of the meadow's.
-A fountain sits inside a base pocket on a SYMMETRIC push map, where the two sides
-must get the identical number out of identical terrain; anything else is a mirror
-map that is not a mirror. Water is the element with NO roster content, so no squad
-anyone can field collects the own_tile_effect_bonus at its own fountain: the heal is
-the authored 30 for everybody, every time. Holy would have failed that test the
-moment a holy hero is authored (they would top up 25% faster at home than the
-opponent does), and it also collides with the meadow -- the sacred/shrine fiction is
-already spoken for by a NATURE tile, so a second "holy" healing surface would read as
-the same thing with different rules. Water is also just what a fountain is, and it
-puts it in the family the game already elements that way (deep_water, slippery_ice).
-
-DELIBERATELY ELEMENTLESS: `stealth` (a pure rule flag -- it neither damages nor
-grants a magnitude, so an element on it would colour a badge and change nothing),
-and every tile TYPE that imposes no effect (grass_plains, tree, forest_dirt,
-obsidian, snow_field, ...). A tile with nothing to apply has nothing to element:
-the badge would promise a matchup the board never resolves."
+DELIBERATELY ELEMENTLESS: stealth (a pure rule flag) and every tile type that applies no
+effect (grass_plains, tree, forest_dirt, obsidian, snow_field, ...)."
+dual_step_multipliers = {
+-2: 0.5,
+-1: 0.75,
+0: 1.0,
+1: 1.25,
+2: 1.5
+}
 tile_match_bonus = 1.25
 own_tile_benefit = 0.9
 own_tile_effect_bonus = 1.25
@@ -123,16 +150,16 @@ tile_elements = {
 &"deep_water": &"water",
 &"empowering_water": &"water",
 &"fire": &"fire",
-&"fountain": &"water",
 &"fortify": &"earth",
+&"fountain": &"water",
 &"magma_vent": &"fire",
 &"molten_lava": &"fire",
 &"rock_rubble": &"earth",
-&"sacred_meadow": &"nature",
+&"sacred_meadow": &"plant",
 &"scorched": &"fire",
 &"scorching_vent": &"fire",
-&"slippery_ice": &"water",
-&"tall_grass": &"nature",
-&"vine_trap": &"nature",
-&"void_spot": &"dark"
+&"slippery_ice": &"ice",
+&"tall_grass": &"plant",
+&"vine_trap": &"plant",
+&"void_spot": &"grim"
 }

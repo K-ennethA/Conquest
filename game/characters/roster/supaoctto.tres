@@ -7,6 +7,7 @@
 script = ExtResource("1_char")
 character_id = &"supaoctto"
 element = &"water"
+element2 = &"martial"
 display_name = "Supaoctto"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Vineweave pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")

@@ -6,8 +6,9 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"winged_cat"
-element = &"nature"
-display_name = "Winged Cat"
+element = &"grim"
+element2 = &"wind"
+display_name = "Familurr"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Vampito pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")
 ; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/winged_cat.glb @ 586f2ce): PLACEHOLDER FOR REBALANCE. Stats cloned from vampito.tres (Vampito, the small winged melee critter (the Canine Bat precedent's donor); element nature (green leaf-winged cat, forest family)); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): winged_cat_forge.glb.import root_scale 0.42082 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-11: 3 ft = 0.9144 m) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).

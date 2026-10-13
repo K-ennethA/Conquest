@@ -28,8 +28,9 @@ class_name WeaponResource
 ## USES per battle (Fire Emblem durability, per battle -- nothing breaks for good). -1 = unlimited
 ## (the default: durability is OFF until the owner wants it).
 @export var uses: int = -1
-## Optional element of the strike (same vocabulary as moves / [ElementChart]); "" = neutral.
-@export var element: StringName = &""
+## Element of the strike (same vocabulary as moves / [ElementChart]). Defaults to BASIC: the
+## owner's elementless type (2026-10-12), resisted by metal and grim, beaten by martial.
+@export var element: StringName = &"basic"
 ## The strike's name in menus ("Thrust"); "" = the weapon's own name.
 @export var attack_name: String = ""
 ## Fraction of the wielder's scaling stat added to might (1.0 = the full stat, Fire Emblem's

@@ -298,7 +298,7 @@ func test_fire_tile_annotates_with_its_source() -> void:
 func test_sandstorm_chip_annotates_with_weather() -> void:
 	_set_weather(&"desert_storm")
 	var board := CBoard.new()
-	var u := CUnit.new(0, &"nature")
+	var u := CUnit.new(0, &"plant")
 	board.place(u, Vector3i(0, 0, 0))
 	Weather.run_turn_start(u, board)
 	var ev := _events_for(u)
@@ -312,7 +312,7 @@ func test_sandstorm_chip_annotates_with_weather() -> void:
 func test_overbloom_regrowth_annotates_a_heal() -> void:
 	_set_weather(&"overbloom")
 	var board := CBoard.new()
-	var u := CUnit.new(0, &"nature")
+	var u := CUnit.new(0, &"plant")
 	u.hp = 50
 	board.place(u, Vector3i(0, 0, 0))
 	Weather.run_turn_start(u, board)

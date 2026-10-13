@@ -45,7 +45,7 @@ class_name WeatherResource
 @export var suppressed_tile_effects: Array[StringName] = []
 
 @export_group("Visuals")
-## Which particle rig [WeatherFX] builds: &"clear", &"sun", &"rain", &"sand", &"bloom".
+## Which particle rig [WeatherFX] builds: &"clear", &"sun", &"rain", &"sand", &"bloom", &"snow".
 @export var fx_kind: StringName = &"clear"
 ## Key light (the scene's "Sun") colour and energy multiplier.
 @export var sun_color: Color = Color(1.0, 0.96, 0.88)

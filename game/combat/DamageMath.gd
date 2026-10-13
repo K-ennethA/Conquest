@@ -87,7 +87,7 @@ static func apply_scales(mitigated: int, caster, target, move, board = null) -> 
 	var hunter: float = element_bonus_scale_for(caster, target, board)
 	if hunter > NEUTRAL:
 		dealt = maxi(1, roundi(float(dealt) * hunter))
-		var elem: String = String(ElementChart.element_of(target))
+		var elem: String = _hunted_element(caster, target, board)
 		notes.append_array(_notes_for(
 			caster, board, "damage_vs_element_" + elem, hunter, "vs %s" % elem))
 
@@ -386,11 +386,33 @@ static func element_bonus_scale_for(caster, target, board = null) -> float:
 	# does not expose one is deliberately never hunted.
 	if not target.has_method("get_element"):
 		return NEUTRAL
-	var elem: String = String(target.get_element())
+	var elem: String = _hunted_element(caster, target, board)
 	if elem == "":
 		return NEUTRAL
 	var bonus: float = _modifier_of(caster, board, "damage_vs_element_" + elem)
 	return NEUTRAL + bonus if bonus > 0.0 else NEUTRAL
+
+
+## Which of [param target]'s types (one or two) the caster's "damage_vs_element_<type>"
+## passive bites hardest into; "" when it hunts none of them. A two-type target is hunted
+## by EITHER type, once (the larger bonus) -- never twice.
+static func _hunted_element(caster, target, board) -> String:
+	if not target.has_method("get_element"):
+		return ""
+	var types: Array = [target.get_element()]
+	if target.has_method("get_element2"):
+		types.append(target.get_element2())
+	var best: String = ""
+	var best_bonus: float = 0.0
+	for t in types:
+		var elem: String = String(t)
+		if elem == "":
+			continue
+		var bonus: float = _modifier_of(caster, board, "damage_vs_element_" + elem)
+		if best == "" or bonus > best_bonus:
+			best = elem
+			best_bonus = bonus
+	return best
 
 
 # --- Defender-side damage reduction ------------------------------------------

@@ -7,16 +7,17 @@
 script = ExtResource("1_char")
 character_id = &"ember_stump"
 element = &"fire"
-display_name = "Ember Stump"
+display_name = "Cinderbark"
 description = "PLACEHOLDER -- imported from forge for the compendium only. Default stats cloned from Barkling pending rebalance; no moves or abilities yet."
 model_scene = ExtResource("2_model")
 ; forge import 2026-10-11 (compendium placeholder, 287ff9f / 6ba132b / cb0a8ca pattern; forge rigged/ember_stump.glb @ 586f2ce): PLACEHOLDER FOR REBALANCE. Stats cloned from tree_grunt.tres (Barkling / tree_grunt, the 8 ft tree grunt (a charred, burning stump); element fire); moves, abilities, AI and movement kind are not designed yet; the idle + walk clips are forge PLACEHOLDERS. Referenced by nothing (no encounters, spawns, story, shops, AI rosters). TRUE SIZE (CONQUEST.md "Size"): ember_stump_forge.glb.import root_scale 0.29477 normalises the glb to 1.80 m; model_scale = target (ARTIST SIZE 2026-10-11: 8 ft = 2.4384 m; wide: overhangs its tile, still ONE tile) / the measured imported idle extent (first frame, top - bottom, as the size table measures it).
-base_health = 55
-base_attack = 14
-base_defense = 8
-base_magic = 2
-base_magic_defense = 6
-base_speed = 7
+; owner 2026-10-12 (roster page): Cinderbark is Barkling's fire branch, like Scyther to Scizor: a redistribution of stats -- the SAME total (92) moved: +attack +magic +defense, -speed -health -magic defense. Evolves with the Sunstone.
+base_health = 52
+base_attack = 16
+base_defense = 9
+base_magic = 6
+base_magic_defense = 5
+base_speed = 4
 base_movement = 3
 attack_range = 1
 model_scale = 1.34343

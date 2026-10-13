@@ -193,7 +193,7 @@ func test_grass_encounter_runs_the_real_duel_and_a_befriend_grows_the_party() ->
 	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.grace_steps = 0
-	var lead: StoryPartyMember = s.member("vineweave")
+	var lead: StoryPartyMember = s.member("seedant")
 	var half: int = floori(lead.max_hp() * 0.5)
 	lead.current_hp = half
 	s.member("blightcap").current_hp = 20
@@ -224,7 +224,7 @@ func test_grass_encounter_runs_the_real_duel_and_a_befriend_grows_the_party() ->
 	assert_true(req.is_wild(), "a wild encounter")
 	assert_eq(req.foe_party.size(), 1, "wild encounters are one foe")
 	assert_true(req.can_befriend(), "the grass table allows befriending")
-	assert_eq(req.player_party[0].member_id, "vineweave", "the party lead steps forward")
+	assert_eq(req.player_party[0].member_id, "seedant", "the party lead steps forward")
 	assert_eq(req.player_party[0].current_hp, half, "with its carried HP")
 	var foe_id: String = String(req.foe_party[0].character_id)
 	# Make the win and the offer certain (the seeded roll is pinned by test_duel_lifecycle).
@@ -292,9 +292,9 @@ func test_a_lost_wild_duel_whites_out_to_the_wayshrine() -> void:
 	assert_eq(StoryController.last_result().outcome, BattleResult.OUTCOME_DEFEAT, "reported as a defeat")
 	assert_eq(s.location_area(), "oakvale", "whited out to the respawn town")
 	assert_eq(s.location_cell(), Vector3i(10, 10, 0), "at its Wayshrine")
-	assert_false(s.member("vineweave").wounded, "the party is healed")
-	assert_eq(s.member("vineweave").current_hp, StoryPartyMember.HP_FULL, "to full")
-	assert_eq(s.member("vineweave").growth_points(), 0, "a loss earns no Growth (growth_on_loss 0)")
+	assert_false(s.member("seedant").wounded, "the party is healed")
+	assert_eq(s.member("seedant").current_hp, StoryPartyMember.HP_FULL, "to full")
+	assert_eq(s.member("seedant").growth_points(), 0, "a loss earns no Growth (growth_on_loss 0)")
 
 
 func test_fleeing_ends_the_duel_where_you_stood() -> void:
@@ -302,7 +302,7 @@ func test_fleeing_ends_the_duel_where_you_stood() -> void:
 	StoryFixture.past_opening(StoryController.state())
 	var s: StoryState = StoryController.state()
 	s.set_location("mossway", Vector3i(6, 3, 0), "east")
-	s.member("vineweave").current_hp = 60
+	s.member("seedant").current_hp = 60
 	_rules.flee_base = 1.0
 	var req := _begin_wild(&"blightcap")
 	assert_true(req.can_flee(), "a wild duel may be fled")
@@ -318,8 +318,8 @@ func test_fleeing_ends_the_duel_where_you_stood() -> void:
 	assert_eq(StoryController.last_result().outcome, BattleResult.OUTCOME_FLED, "reported as fled")
 	assert_eq(s.location_area(), "mossway", "no whiteout")
 	assert_eq(s.location_cell(), Vector3i(6, 3, 0), "the hero stays put")
-	assert_lte(s.member("vineweave").current_hp, 60, "HP carried (never healed by running)")
-	assert_eq(s.member("vineweave").growth_points(), 0, "running earns no Growth")
+	assert_lte(s.member("seedant").current_hp, 60, "HP carried (never healed by running)")
+	assert_eq(s.member("seedant").growth_points(), 0, "running earns no Growth")
 
 
 func test_the_story_critical_recruit_always_offers_on_a_win() -> void:

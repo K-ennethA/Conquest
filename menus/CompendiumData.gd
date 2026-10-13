@@ -140,10 +140,17 @@ static func _regex_escape(t: String) -> String:
 # Content scans
 # =============================================================================
 
+## Roster entries that are not creatures or people and so get no compendium page: the Destroy
+## Base STRUCTURE (owner 2026-10-12: Bastion is not a creature).
+const NOT_IN_COMPENDIUM: Array[String] = ["bastion"]
+
+
 ## Roster characters, sorted by name.
 static func roster() -> Array:
 	var out: Array = []
 	for id in CharacterLibrary.all_ids():
+		if String(id) in NOT_IN_COMPENDIUM:
+			continue
 		var c := CharacterLibrary.get_character(id)
 		if c != null:
 			out.append(c)

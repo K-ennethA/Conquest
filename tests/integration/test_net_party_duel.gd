@@ -302,7 +302,7 @@ func test_a_dedicated_trio_server_folds_both_teams_into_the_start() -> void:
 		"both seated")
 	var a: NetSessionNode = _hs() if _hs().local_slot() == 0 else _cs()
 	var b: NetSessionNode = _cs() if a == _hs() else _hs()
-	a.send_lobby_message(DuelNetConfig.MSG_PICK, {"character_id": "petalfang", "team": ["petalfang", "monster", "undead", "oakheart"]})
+	a.send_lobby_message(DuelNetConfig.MSG_PICK, {"character_id": "petalfang", "team": ["petalfang", "monster", "undead", "blightcap"]})
 	b.send_lobby_message(DuelNetConfig.MSG_PICK, {"character_id": "bastion", "team": ["bastion", "gem_knight"]})
 	a.set_ready(true)
 	b.set_ready(true)

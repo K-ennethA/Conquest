@@ -318,15 +318,22 @@ static func apply_button_role(button: Button) -> void:
 ## Colour for a move/ability element tag; falls back to gold for unknowns.
 static func element_color(element: String) -> Color:
 	match element.to_lower():
+		"basic", "normal": return MenuTheme.EL_BASIC
+		"martial", "fighting": return MenuTheme.EL_MARTIAL
 		"ember", "fire": return MenuTheme.EL_FIRE
-		"frost", "water", "ice": return MenuTheme.EL_WATER
-		"arcane", "magic": return MenuTheme.EL_ARCANE
-		"holy", "light": return MenuTheme.EL_HOLY
-		"nature", "grass", "plant": return MenuTheme.EL_NATURE
+		"water": return MenuTheme.EL_WATER
+		"plant", "nature", "grass": return MenuTheme.EL_PLANT
+		"bug", "insect": return MenuTheme.EL_BUG
+		"electric", "lightning", "spark": return MenuTheme.EL_ELECTRIC
+		"ice", "frost": return MenuTheme.EL_ICE
 		"wind", "air": return MenuTheme.EL_WIND
 		"earth", "stone", "gem", "rock": return MenuTheme.EL_EARTH
-		"steel", "metal", "physical": return MenuTheme.EL_STEEL
-		"dark", "shadow", "blight": return MenuTheme.EL_DARK
+		"metal", "steel", "physical": return MenuTheme.EL_METAL
+		"poison", "toxic": return MenuTheme.EL_POISON
+		"radiant", "astral", "holy", "light": return MenuTheme.EL_RADIANT
+		"grim", "dark", "shadow", "blight", "ghost": return MenuTheme.EL_GRIM
+		"dragon": return MenuTheme.EL_DRAGON
+		"arcane", "magic": return MenuTheme.EL_ARCANE
 		_: return GOLD
 
 ## HP colour tier for a 0..1 fraction (same thresholds as the 3D map bar).

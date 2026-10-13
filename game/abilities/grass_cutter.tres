@@ -14,5 +14,5 @@ description = "Vineweave knows exactly where the living wood is weakest. It stri
 trigger = 0
 condition = SubResource("Resource_gc_cond")
 rule_modifiers = {
-"damage_vs_element_nature": 0.5
+"damage_vs_element_plant": 0.5
 }

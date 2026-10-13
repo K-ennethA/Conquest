@@ -5,8 +5,9 @@ extends OverworldEntity
 ## beat titled with the sign's display name -- the Pokémon text box read).
 
 @export_multiline var text: String = ""
-## "post" = a wooden signpost; "stone" = a carved standing stone (a memorial, a waymarker).
-@export_enum("post", "stone") var look: String = "post"
+## "post" = a wooden signpost; "stone" = a carved standing stone (a memorial, a waymarker); "note" =
+## a scrap of paper on the ground (a dropped clue); "grave" = a gravestone (the graveyard).
+@export_enum("post", "stone", "note", "grave") var look: String = "post"
 
 
 func kind() -> StringName:

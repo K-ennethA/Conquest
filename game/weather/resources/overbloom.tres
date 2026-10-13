@@ -9,7 +9,7 @@
 
 [sub_resource type="Resource" id="Resource_nature"]
 script = ExtResource("3_elem")
-elements = Array[StringName]([&"nature"])
+elements = Array[StringName]([&"plant"])
 
 [sub_resource type="Resource" id="Resource_heal_fx"]
 script = ExtResource("6_heal")
@@ -48,7 +48,7 @@ icon = "✿"
 color = Color(0.98, 0.56, 0.82, 1)
 description = "The wilds erupt in bloom. Nature units heal 1/10 max HP each turn; Nature moves x1.15 damage; pollen gives non-Nature units -5 evasion."
 element_damage_scale = {
-&"nature": 1.15
+&"plant": 1.15
 }
 stat_rules = Array[ExtResource("2_abres")]([SubResource("Resource_pollen")])
 turn_start_rules = Array[ExtResource("2_abres")]([SubResource("Resource_bloom_heal")])

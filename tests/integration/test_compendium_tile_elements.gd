@@ -119,7 +119,7 @@ func test_an_elemented_tile_shows_a_badge_wide_enough_to_read() -> void:
 
 	assert_true(row.is_visible_in_tree(), "the element row is on screen for an elemented tile")
 	assert_true(badge.is_visible_in_tree(), "and so is the badge itself")
-	assert_eq(label.text, ElementVisuals.label_for(&"nature"),
+	assert_eq(label.text, ElementVisuals.label_for(&"plant"),
 			"tall grass is nature, read off the chart")
 	assert_gt(label.size.x, 0.0, "the badge label was granted real width")
 	assert_true(label.size.x + 1.0 >= _text_width(label),
@@ -137,7 +137,7 @@ func test_the_matchup_hint_is_drawn_next_to_the_badge() -> void:
 	gut.p("hint    : \"%s\"" % hint.text)
 	assert_false(hint.text.strip_edges().is_empty(),
 			"the matchup line says what the element does, not just what it is")
-	assert_eq(hint.text, TileGallery.matchup_hint(&"nature"),
+	assert_eq(hint.text, TileGallery.matchup_hint(&"plant"),
 			"and it is the LIVE line, read from the matrix rather than authored here")
 	assert_true(hint.is_visible_in_tree(), "drawn, not built and hidden")
 

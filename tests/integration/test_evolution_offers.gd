@@ -5,18 +5,24 @@ extends GutTest
 ##   * the post-battle offer respects Hold (and still offers when Hold is off);
 ##   * "Not now" -> evolve later from Journey -> Party (the member card's checklist + EVOLVE);
 ##   * the Party card's Hold toggle is saved;
-##   * Journey -> Bag -> Use: an evolution item offers the screen and is spent only on Evolve;
+##   * Journey -> Bag -> Use: an evolution item offers the screen and is spent only on Evolve
+##     (the SHIPPED Sunstone edge, Barkling -> Cinderbark);
 ##   * a Location requirement is offered on ENTERING the area (and not re-asked every step);
 ##   * a flag set by the story offers a StoryFlag edge;
 ##   * save / reload keeps Hold and the battle-feat counters (story slot + RosterLedger);
 ##   * Character Select's detail block shows the checklist and the Hold toggle.
-## Example edges come from tests/helpers/evolution_examples (EvolutionLibrary.add_extra_edges).
+## Example edges come from tests/helpers/evolution_examples (EvolutionLibrary.add_extra_edges);
+## the Barkling tests use the test-only Barkling -> Mycothrall edge (Growth 3 + 2 wins,
+## tests/helpers/evolution_fixture.gd), installed per test because the Location promotion
+## example also ends in Mycothrall. after_each drops every extra edge.
 ## Saves, the roster and the item store go to temp paths (tests/README.md rules 3 and 4).
 
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
 const CHARACTER_SELECT := preload("res://menus/CharacterSelect.tscn")
-const SUNSTONE_EDGE := "res://tests/helpers/evolution_examples/example_sunstone.tres"
 const PROMOTION_EDGE := "res://tests/helpers/evolution_examples/example_location_promotion.tres"
+const EvoFixture := preload("res://tests/helpers/evolution_fixture.gd")
+## A unit in no evolution line (shipped, example or fixture).
+const NO_LINE := "gem_knight"
 const TEMP_DIR := "user://test_evolution_offers/"
 const TEMP_ROSTER := "user://test_evolution_offers_roster.json"
 const TEMP_ITEMS := "user://test_evolution_offers_items.json"
@@ -142,6 +148,7 @@ func _ready_barkling(s: StoryState, hold: bool) -> StoryPartyMember:
 # --- Post-battle offer + Hold -------------------------------------------------------------
 
 func test_the_post_battle_offer_respects_hold() -> void:
+	EvoFixture.install()
 	var s := _journey(["tree_grunt"])
 	var bark := _ready_barkling(s, true)
 	_win_and_return()
@@ -155,6 +162,7 @@ func test_the_post_battle_offer_respects_hold() -> void:
 
 
 func test_the_post_battle_offer_appears_without_hold() -> void:
+	EvoFixture.install()
 	var s := _journey(["tree_grunt"])
 	var bark := _ready_barkling(s, false)
 	_win_and_return()
@@ -172,7 +180,8 @@ func test_the_post_battle_offer_appears_without_hold() -> void:
 # --- Not now -> evolve later from Journey -> Party ------------------------------------------
 
 func test_not_now_then_evolve_later_from_the_party_page() -> void:
-	var s := _journey(["tree_grunt", "vineweave"])
+	EvoFixture.install()
+	var s := _journey(["tree_grunt", NO_LINE])
 	var bark: StoryPartyMember = s.member("tree_grunt")
 	bark.add_growth(3)
 	bark.add_feats({"wins": 2})
@@ -188,13 +197,17 @@ func test_not_now_then_evolve_later_from_the_party_page() -> void:
 	jm.show_party()
 	var card := jm.member_card("tree_grunt")
 	assert_not_null(card, "the Barkling has a card")
-	var rows: Array = card.find_children("Req_*", "", true, false)
+	var block := card.find_child("Edge_%s" % EvoFixture.EDGE_ID, true, false)
+	assert_not_null(block, "its checklist has the Mycothrall branch (beside the shipped Sunstone one)")
+	if block == null:
+		return
+	var rows: Array = block.find_children("Req_*", "", true, false)
 	assert_eq(rows.size(), 2, "its checklist lists both requirements")
 	for r in rows:
 		assert_true(bool(r.get_meta(&"met")), "and both are met")
-	assert_not_null(card.find_child("Ready", true, false), "marked READY")
-	var vine := jm.member_card("vineweave")
-	assert_null(vine.find_child("EvolveButton", true, false), "a unit in no line has no EVOLVE")
+	assert_not_null(block.find_child("Ready", true, false), "marked READY")
+	var other := jm.member_card(NO_LINE)
+	assert_null(other.find_child("EvolveButton", true, false), "a unit in no line has no EVOLVE")
 	var btn := card.find_child("EvolveButton", true, false) as Button
 	assert_not_null(btn, "the pending evolution is listed with EVOLVE")
 	if btn == null:
@@ -208,15 +221,16 @@ func test_not_now_then_evolve_later_from_the_party_page() -> void:
 	assert_true(bool(evo.confirm().get("success", false)), "Evolve commits")
 	evo.dismiss()
 	evo.dismiss()
-	assert_true(await _await_until(func() -> bool: return bark.character_id == "oakheart"), "the member became Oakheart")
+	assert_true(await _await_until(func() -> bool: return bark.character_id == String(EvoFixture.TO_ID)), "the member became Mycothrall")
 	await _frames(2)
 	var after := jm.member_card("tree_grunt")
 	assert_not_null(after, "the page was rebuilt")
-	assert_not_null(after.find_child("FinalForm", true, false), "Oakheart is a final form: no checklist")
-	assert_eq(String(StorySaveManager.peek(1)["party"][0]["character_id"]), "oakheart", "and the journey saved it")
+	assert_not_null(after.find_child("FinalForm", true, false), "Mycothrall is a final form: no checklist")
+	assert_eq(String(StorySaveManager.peek(1)["party"][0]["character_id"]), String(EvoFixture.TO_ID), "and the journey saved it")
 
 
 func test_the_party_card_checklist_shows_progress_and_hold_saves() -> void:
+	EvoFixture.install()
 	var s := _journey(["tree_grunt"])
 	var bark: StoryPartyMember = s.member("tree_grunt")
 	bark.add_growth(3)
@@ -225,7 +239,11 @@ func test_the_party_card_checklist_shows_progress_and_hold_saves() -> void:
 	jm.show_party()
 	var card := jm.member_card("tree_grunt")
 	assert_null(card.find_child("EvolveButton", true, false), "no EVOLVE while a requirement is missing")
-	var rows: Array = card.find_children("Req_*", "", true, false)
+	var block := card.find_child("Edge_%s" % EvoFixture.EDGE_ID, true, false)
+	assert_not_null(block, "the Mycothrall branch has a checklist")
+	if block == null:
+		return
+	var rows: Array = block.find_children("Req_*", "", true, false)
 	assert_true(bool(rows[0].get_meta(&"met")), "Growth 3 met")
 	assert_false(bool(rows[1].get_meta(&"met")), "2 wins not yet")
 	var prog := rows[1].find_child("Progress", true, false) as Label
@@ -247,24 +265,27 @@ func test_the_party_card_checklist_shows_progress_and_hold_saves() -> void:
 # --- UseItem from the bag -----------------------------------------------------------------
 
 func test_using_an_item_from_the_bag_offers_the_evolution_and_spends_it() -> void:
-	EvolutionLibrary.add_extra_edges([load(SUNSTONE_EDGE)])
-	var s := _journey(["vineweave", "tree_grunt"])
+	var s := _journey([NO_LINE, "tree_grunt"])
 	s.add_item("sunstone", 2)
 	var jm := _menu(s)
 	jm.show_bag()
 	var item_card: Node = jm.find_child("Item_sunstone", true, false)
 	assert_not_null(item_card, "the Sunstone is in the bag")
+	if item_card == null:
+		return
 	var on_bark := item_card.find_child("Use_tree_grunt", true, false) as Button
-	var on_vine := item_card.find_child("Use_vineweave", true, false) as Button
-	assert_true(on_bark != null and on_vine != null, "with a Use button per member")
+	var on_other := item_card.find_child("Use_%s" % NO_LINE, true, false) as Button
+	assert_true(on_bark != null and on_other != null, "with a Use button per member")
+	if on_bark == null or on_other == null:
+		return
 
-	on_bark.pressed.emit()
+	on_other.pressed.emit()
 	await _frames(2)
-	assert_eq(_screens.size(), 0, "no effect on a Barkling: no screen")
+	assert_eq(_screens.size(), 0, "no effect on a unit in no line: no screen")
 	assert_eq(s.item_count("sunstone"), 2, "and the stone is kept")
 
-	on_vine = jm.find_child("Item_sunstone", true, false).find_child("Use_vineweave", true, false) as Button
-	on_vine.pressed.emit()
+	on_bark = jm.find_child("Item_sunstone", true, false).find_child("Use_tree_grunt", true, false) as Button
+	on_bark.pressed.emit()
 	assert_true(await _await_until(func() -> bool: return not _screens.is_empty()), "using it offers the evolution")
 	if _screens.is_empty():
 		return
@@ -273,11 +294,11 @@ func test_using_an_item_from_the_bag_offers_the_evolution_and_spends_it() -> voi
 	evo.decline()
 	await _frames(2)
 	assert_eq(s.item_count("sunstone"), 2, "Not now keeps the stone")
-	assert_eq(s.member("vineweave").character_id, "vineweave", "and the member")
+	assert_eq(s.member("tree_grunt").character_id, "tree_grunt", "and the member")
 
-	var r: Dictionary = await _use_and_confirm("sunstone", "vineweave")
+	var r: Dictionary = await _use_and_confirm("sunstone", "tree_grunt")
 	assert_true(bool(r.get("evolved", false)), "confirmed")
-	assert_eq(s.member("vineweave").character_id, "petalfang", "the Sunstone evolved it")
+	assert_eq(s.member("tree_grunt").character_id, "ember_stump", "the Sunstone evolved Barkling into Cinderbark")
 	assert_eq(s.item_count("sunstone"), 1, "and one stone was spent")
 
 
@@ -298,14 +319,13 @@ func _use_and_confirm(item_id: String, member_id: String) -> Dictionary:
 
 
 func test_the_party_evolve_button_uses_a_bag_item_when_that_completes_it() -> void:
-	EvolutionLibrary.add_extra_edges([load(SUNSTONE_EDGE)])
-	var s := _journey(["vineweave"])
+	var s := _journey(["tree_grunt"])
 	var jm := _menu(s)
 	jm.show_party()
-	assert_null(jm.member_card("vineweave").find_child("EvolveButton", true, false), "no stone: nothing due")
+	assert_null(jm.member_card("tree_grunt").find_child("EvolveButton", true, false), "no stone: nothing due")
 	s.add_item("sunstone", 1)
 	jm.refresh_party()
-	var card := jm.member_card("vineweave")
+	var card := jm.member_card("tree_grunt")
 	var btn := card.find_child("EvolveButton", true, false) as Button
 	assert_not_null(btn, "with a stone in the bag the evolution is due")
 	var ready := card.find_child("Ready", true, false)
@@ -319,7 +339,7 @@ func test_the_party_evolve_button_uses_a_bag_item_when_that_completes_it() -> vo
 	evo.dismiss()
 	evo.dismiss()
 	await _frames(2)
-	assert_eq(s.member("vineweave").character_id, "petalfang", "evolved")
+	assert_eq(s.member("tree_grunt").character_id, "ember_stump", "evolved into Cinderbark")
 	assert_eq(s.item_count("sunstone"), 0, "the stone was spent")
 
 
@@ -445,6 +465,7 @@ func test_an_old_v2_save_without_hold_loads_with_hold_off() -> void:
 # --- Character Select (open modes) -----------------------------------------------------------
 
 func test_character_select_shows_the_checklist_and_hold() -> void:
+	EvoFixture.install()
 	RosterLedger.add_growth("tree_grunt", 3)
 	RosterLedger.add_feats("tree_grunt", {"wins": 1})
 	var cs = CHARACTER_SELECT.instantiate()
@@ -453,7 +474,7 @@ func test_character_select_shows_the_checklist_and_hold() -> void:
 	cs._show_detail("tree_grunt")
 	var block := cs.find_child("EvolutionBlock", true, false) as EvolutionDetailBlock
 	assert_not_null(block, "the detail pane's Growth block")
-	var rows: Array = block.checklist_rows()
+	var rows: Array = block.checklist_rows().filter(func(r): return r["edge_id"] == String(EvoFixture.EDGE_ID))
 	assert_eq(rows.size(), 2, "the checklist lists both requirements")
 	assert_true(bool(rows[0]["met"]), "Growth met")
 	assert_false(bool(rows[1]["met"]), "the wins not yet")
@@ -462,9 +483,10 @@ func test_character_select_shows_the_checklist_and_hold() -> void:
 	block.hold_toggle.button_pressed = true
 	assert_true(RosterLedger.is_held("tree_grunt"), "Hold writes the ledger member")
 	RosterLedger.add_feats("tree_grunt", {"wins": 1})
-	cs._show_detail("vineweave")
+	cs._show_detail(NO_LINE)
 	cs._show_detail("tree_grunt")
 	assert_true(block.evolve_button.visible, "both met: EVOLVE (Hold never hides the manual button)")
 	assert_true(block.hold_toggle.button_pressed, "the toggle shows the saved Hold")
 	for r in block.checklist_rows():
-		assert_true(bool(r["met"]), "every row is met")
+		if r["edge_id"] == String(EvoFixture.EDGE_ID):
+			assert_true(bool(r["met"]), "every row is met")

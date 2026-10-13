@@ -1064,6 +1064,19 @@ func get_element() -> StringName:
 			return StringName(e)
 	return &""
 
+## The unit's SECOND type ([member CharacterResource.element2]), or &"" for one type.
+func get_element2() -> StringName:
+	if character_resource != null:
+		var e = character_resource.get("element2")
+		if e != null:
+			return StringName(e)
+	return &""
+
+## Every type this unit carries, primary first (one or two). [ElementChart.elements_of]
+## reads this, so the matchup, the at-home tile benefit and the forecast all see both.
+func get_elements() -> Array[StringName]:
+	return ElementChartResource.distinct_keys([get_element(), get_element2()])
+
 ## Current health of the unit (0 when no stats component is present).
 func get_hp() -> int:
 	return current_health

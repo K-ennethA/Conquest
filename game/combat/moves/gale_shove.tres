@@ -20,6 +20,7 @@ script = ExtResource("5_jp7tl")
 
 [resource]
 script = ExtResource("4_phh4w")
+element = &"basic"
 move_id = &"gale_shove"
 display_name = "Gale Shove"
 description = "Knocks an enemy back two cells for light damage."

@@ -34,13 +34,23 @@ class_name ElementChart
 ## The single resource every number is read from.
 const CHART_PATH: String = "res://game/combat/resources/element_chart.tres"
 
+## THE 15 TYPES (owner, 2026-10-12; docs/design/DECISIONS.md). The older names map onto them:
+## nature -> PLANT, dark -> GRIM (dark and ghost merged), holy -> RADIANT, no element -> BASIC.
+const BASIC: StringName = &"basic"
+const MARTIAL: StringName = &"martial"
 const FIRE: StringName = &"fire"
 const WATER: StringName = &"water"
-const NATURE: StringName = &"nature"
+const PLANT: StringName = &"plant"
+const BUG: StringName = &"bug"
+const ELECTRIC: StringName = &"electric"
+const ICE: StringName = &"ice"
 const WIND: StringName = &"wind"
 const EARTH: StringName = &"earth"
-const HOLY: StringName = &"holy"
-const DARK: StringName = &"dark"
+const METAL: StringName = &"metal"
+const POISON: StringName = &"poison"
+const RADIANT: StringName = &"radiant"
+const GRIM: StringName = &"grim"
+const DRAGON: StringName = &"dragon"
 
 ## The only multiplier that is a code constant, because it is the IDENTITY — "nothing
 ## applies". Every real number (how strong is strong, how much a tile adds) is data.
@@ -148,7 +158,13 @@ static func effectiveness(attacker_element, defender_element) -> float:
 
 ## Matchup multiplier for [param move] landing on [param target].
 static func type_scale_for(move, target) -> float:
-	return multiplier(move_element(move), element_of(target))
+	return multiplier_vs(move_element(move), elements_of(target))
+
+
+## Multiplier for [param attacker_element] striking a defender of [param defender_elements]
+## (one type, or two -- the two-type STEP rule, [method ElementChartResource.multiplier_vs]).
+static func multiplier_vs(attacker_element, defender_elements) -> float:
+	return chart().multiplier_vs(attacker_element, defender_elements)
 
 
 ## Environment amplifier: [member ElementChartResource.tile_match_bonus] when the move's
@@ -166,11 +182,11 @@ static func tile_scale_for(move, target, board) -> float:
 ## Home benefit: [member ElementChartResource.own_tile_benefit] when [param target]
 ## stands on a tile of its OWN element, else [constant NEUTRAL].
 static func type_benefit_scale_for(target, board) -> float:
-	var te: StringName = element_of(target)
-	if te == &"":
+	var types: Array[StringName] = elements_of(target)
+	if types.is_empty():
 		return NEUTRAL
 	for el in tile_elements_under(target, board):
-		if StringName(el) == te:
+		if StringName(el) in types:
 			return chart().home_benefit()
 	return NEUTRAL
 
@@ -216,7 +232,7 @@ static func damage_scale_for(move, target, board) -> float:
 ## Multiplier for environmental damage of [param source_element] landing on
 ## [param target]. [constant NEUTRAL] for an elementless source or victim.
 static func environment_scale_for(source_element, target) -> float:
-	return multiplier(source_element, element_of(target))
+	return multiplier_vs(source_element, elements_of(target))
 
 
 ## The element of [param tile_effect], read from the chart's
@@ -292,7 +308,7 @@ static func home_effect_amount(tile_effect, amount: int, unit) -> int:
 	if amount == 0:
 		return amount
 	var tile: StringName = tile_element_of(tile_effect)
-	if tile == &"" or tile != element_of(unit):
+	if tile == &"" or not (tile in elements_of(unit)):
 		return amount
 	var res := chart()
 	var scale: float = res.home_effect_bonus() if amount > 0 else res.home_benefit()
@@ -319,6 +335,23 @@ static func element_of(unit) -> StringName:
 	if unit.has_method("get_element"):
 		return ElementChartResource.key_of(unit.get_element())
 	return ElementChartResource.key_of(unit.get("element"))
+
+
+## EVERY element of [param unit], primary first: one or two distinct non-empty keys. Prefers a
+## [code]get_elements()[/code] method (a live [Unit]), else [method element_of] plus an
+## [code]element2[/code] read through [code]get_element2()[/code] or the property (mocks,
+## characters); a unit with no element at all yields [] (neutral everywhere).
+static func elements_of(unit) -> Array[StringName]:
+	if unit == null:
+		return []
+	if unit.has_method("get_elements"):
+		return ElementChartResource.distinct_keys(unit.get_elements())
+	var second = null
+	if unit.has_method("get_element2"):
+		second = unit.get_element2()
+	elif typeof(unit) == TYPE_OBJECT and "element2" in unit:
+		second = unit.get("element2")
+	return ElementChartResource.distinct_keys([element_of(unit), second])
 
 
 ## Distinct elements contributed by the tile effects under [param unit]. Reads the

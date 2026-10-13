@@ -185,7 +185,245 @@ static func prop(kind: String, footprint: Vector2i, tint: Color, seed: int = 0) 
 			return scarecrow(tint)
 		"mat":
 			return mat(fp, tint)
+		"bed":
+			return bed(fp, tint)
+		"boulder":
+			return boulder(fp, tint, seed)
+		"palm":
+			return palm(seed)
+		"boat":
+			return boat(tint)
+		"tent":
+			return tent(fp, tint)
+		"tomb":
+			return tomb(tint)
+		"hole":
+			return hole(tint)
+		"roots":
+			return roots(tint, seed)
+		"great_tree":
+			return great_tree(tint)
+		"whirlpool":
+			return whirlpool(tint)
 	return house(fp, tint)
+
+
+## A BED along the footprint's long axis (1x2 = north-south, pillow NORTH; 2x1 = east-west,
+## pillow WEST): a wooden frame, a mattress ~0.5 m up (a sleeper lies on it,
+## [constant OverworldActor.LIE_HEIGHT]), a pillow and a blanket in [param tint]. PLACEHOLDER.
+static func bed(footprint: Vector2i, tint: Color = Color(0.5, 0.24, 0.22)) -> Node3D:
+	var e: Array = _extent(footprint, 0.25)
+	var x0: float = e[0]
+	var z0: float = e[1]
+	var x1: float = e[2]
+	var z1: float = e[3]
+	var long_z: bool = footprint.y >= footprint.x
+	var pm := ProcMesh.new()
+	pm.box(Vector3(x0, 0.0, z0), Vector3(x1, 0.32, z1), WOOD_DARK)
+	pm.box(Vector3(x0 + 0.05, 0.32, z0 + 0.05), Vector3(x1 - 0.05, 0.46, z1 - 0.05), Color(0.9, 0.88, 0.8))
+	if long_z:
+		pm.box(Vector3(x0, 0.0, z0 - 0.08), Vector3(x1, 0.95, z0 + 0.06), WOOD)
+		pm.box(Vector3(x0 + 0.15, 0.46, z0 + 0.15), Vector3(x1 - 0.15, 0.6, z0 + 0.6), Color(0.96, 0.95, 0.9))
+		pm.box(Vector3(x0 + 0.02, 0.46, z0 + 0.8), Vector3(x1 - 0.02, 0.54, z1 - 0.02), tint, tint.lightened(0.08))
+	else:
+		pm.box(Vector3(x0 - 0.08, 0.0, z0), Vector3(x0 + 0.06, 0.95, z1), WOOD)
+		pm.box(Vector3(x0 + 0.15, 0.46, z0 + 0.15), Vector3(x0 + 0.6, 0.6, z1 - 0.15), Color(0.96, 0.95, 0.9))
+		pm.box(Vector3(x0 + 0.8, 0.46, z0 + 0.02), Vector3(x1 - 0.02, 0.54, z1 - 0.02), tint, tint.lightened(0.08))
+	return _wrap(pm, "Bed")
+
+
+## A BOULDER over the footprint: a heap of weathered blocks in [param tint], jittered by
+## [param seed] (the badlands' red rock; a rock that seals a cave). PLACEHOLDER.
+static func boulder(footprint: Vector2i, tint: Color = Color(0.56, 0.32, 0.22), seed: int = 0) -> Node3D:
+	var e: Array = _extent(footprint, 0.12)
+	var pm := ProcMesh.new()
+	var w: float = e[2] - e[0]
+	var d: float = e[3] - e[1]
+	pm.box(Vector3(e[0], 0.0, e[1]), Vector3(e[2], 0.9, e[3]), tint, tint.lightened(0.08))
+	for k in 3:
+		var jx: float = (ProcMesh.hash01(seed, k, 1) - 0.5) * w * 0.3
+		var jz: float = (ProcMesh.hash01(seed, k, 2) - 0.5) * d * 0.3
+		var s: float = 0.55 - 0.12 * float(k)
+		var h: float = 0.9 + 0.45 * float(k + 1)
+		var cx: float = (e[0] + e[2]) * 0.5 + jx
+		var cz: float = (e[1] + e[3]) * 0.5 + jz
+		pm.box(Vector3(cx - w * s * 0.5, 0.6, cz - d * s * 0.5), Vector3(cx + w * s * 0.5, h, cz + d * s * 0.5),
+			tint.darkened(0.06 * float(k)), tint.lightened(0.1))
+	return _wrap(pm, "Boulder")
+
+
+## A PALM leaning over the sand: a segmented trunk, a crown of fronds and a few nuts. PLACEHOLDER.
+static func palm(seed: int = 0) -> Node3D:
+	var pm := ProcMesh.new()
+	var lean: float = 0.04 + ProcMesh.hash01(seed, 3, 7) * 0.04
+	var dir: float = TAU * ProcMesh.hash01(seed, 5, 9)
+	var off := Vector3(cos(dir), 0.0, sin(dir)) * lean
+	var bark := Color(0.52, 0.4, 0.26)
+	var p := Vector3.ZERO
+	for i in 6:
+		var r: float = 0.2 - 0.015 * float(i)
+		pm.box(Vector3(p.x - r, p.y, p.z - r), Vector3(p.x + r, p.y + 0.62, p.z + r), bark.darkened(0.06 * float(i % 2)))
+		p += Vector3(0, 0.6, 0) + off
+	var frond := Color(0.3, 0.56, 0.24)
+	for k in 7:
+		var a: float = TAU * float(k) / 7.0 + dir
+		var f := Vector3(cos(a), 0.0, sin(a))
+		var tip: Vector3 = p + f * 1.05 + Vector3(0, -0.5, 0)
+		var side := Vector3(-f.z, 0.0, f.x) * 0.22
+		pm.quad(p - side, p + side, tip + side * 0.3, tip - side * 0.3, Vector3.UP, frond.lightened(0.05 * float(k % 3)))
+	for k in 3:
+		var a2: float = TAU * float(k) / 3.0
+		var nut: Vector3 = p + Vector3(cos(a2) * 0.18, -0.25, sin(a2) * 0.18)
+		pm.box(nut - Vector3(0.1, 0.1, 0.1), nut + Vector3(0.1, 0.1, 0.1), Color(0.42, 0.3, 0.16))
+	return _wrap(pm, "Palm")
+
+
+## A small rowing BOAT, hull in [param tint] (beached on the sand; also the PLACEHOLDER float a
+## rider stands on when his mount has no model). East-west.
+static func boat(tint: Color = Color(0.32, 0.48, 0.62)) -> Node3D:
+	var pm := ProcMesh.new()
+	pm.box(Vector3(-0.85, 0.0, -0.32), Vector3(0.85, 0.18, 0.32), WOOD_DARK)
+	pm.box(Vector3(-0.95, 0.18, -0.42), Vector3(0.95, 0.42, -0.32), tint)
+	pm.box(Vector3(-0.95, 0.18, 0.32), Vector3(0.95, 0.42, 0.42), tint)
+	pm.box(Vector3(0.85, 0.18, -0.32), Vector3(1.1, 0.48, 0.32), tint.darkened(0.1))
+	pm.box(Vector3(-1.05, 0.18, -0.32), Vector3(-0.85, 0.42, 0.32), tint.darkened(0.1))
+	pm.box(Vector3(-0.15, 0.18, -0.32), Vector3(0.15, 0.3, 0.32), WOOD)
+	return _wrap(pm, "Boat")
+
+
+## A canvas TENT over the footprint (ridge east-west), cloth in [param tint]. PLACEHOLDER.
+static func tent(footprint: Vector2i, tint: Color = Color(0.7, 0.62, 0.48)) -> Node3D:
+	var e: Array = _extent(footprint, 0.2)
+	var x0: float = e[0]
+	var z0: float = e[1]
+	var x1: float = e[2]
+	var z1: float = e[3]
+	var zm: float = (z0 + z1) * 0.5
+	var h: float = 1.5
+	var pm := ProcMesh.new()
+	pm.quad(Vector3(x0, 0.0, z1), Vector3(x1, 0.0, z1), Vector3(x1, h, zm), Vector3(x0, h, zm), Vector3(0, 0.7, 1).normalized(), tint)
+	pm.quad(Vector3(x1, 0.0, z0), Vector3(x0, 0.0, z0), Vector3(x0, h, zm), Vector3(x1, h, zm), Vector3(0, 0.7, -1).normalized(), tint.darkened(0.15))
+	pm.quad(Vector3(x1, 0.0, z1), Vector3(x1, 0.0, z0), Vector3(x1, h, zm), Vector3(x1, h, zm), Vector3.RIGHT, tint.darkened(0.08))
+	pm.quad(Vector3(x0, 0.0, z0), Vector3(x0, 0.0, z1), Vector3(x0, h, zm), Vector3(x0, h, zm), Vector3.LEFT, tint.darkened(0.08))
+	pm.box(Vector3(x0 - 0.05, 0.0, zm - 0.05), Vector3(x0 + 0.05, h + 0.2, zm + 0.05), WOOD_DARK)
+	pm.box(Vector3(x1 - 0.05, 0.0, zm - 0.05), Vector3(x1 + 0.05, h + 0.2, zm + 0.05), WOOD_DARK)
+	return _wrap(pm, "Tent")
+
+
+## A GRAVESTONE ([SignEntity] look "grave"): a rounded headstone on a low plinth in [param tint].
+static func gravestone(tint: Color = Color(0.56, 0.56, 0.54)) -> Node3D:
+	var pm := ProcMesh.new()
+	pm.box(Vector3(-0.42, 0.0, -0.22), Vector3(0.42, 0.12, 0.3), tint.darkened(0.2))
+	pm.box(Vector3(-0.32, 0.12, -0.12), Vector3(0.32, 0.95, 0.04), tint)
+	pm.box(Vector3(-0.24, 0.95, -0.12), Vector3(0.24, 1.08, 0.04), tint.lightened(0.05))
+	pm.box(Vector3(-0.2, 0.5, 0.04), Vector3(0.2, 0.56, 0.06), tint.darkened(0.35))
+	pm.box(Vector3(-0.2, 0.66, 0.04), Vector3(0.2, 0.7, 0.06), tint.darkened(0.35))
+	return _wrap(pm, "Gravestone")
+
+
+## An OPENED TOMB (prop kind "tomb"): its slab pushed aside, steps going down into the dark. Walk-over.
+static func tomb(tint: Color = Color(0.5, 0.5, 0.48)) -> Node3D:
+	var pm := ProcMesh.new()
+	pm.box(Vector3(-0.7, 0.0, -0.75), Vector3(0.7, 0.14, -0.55), tint)
+	pm.box(Vector3(-0.7, 0.0, 0.55), Vector3(0.7, 0.14, 0.75), tint)
+	pm.box(Vector3(-0.75, 0.0, -0.75), Vector3(-0.55, 0.14, 0.75), tint)
+	pm.box(Vector3(0.55, 0.0, -0.75), Vector3(0.75, 0.14, 0.75), tint)
+	pm.box(Vector3(-0.55, 0.02, -0.55), Vector3(0.55, 0.05, 0.55), Color(0.05, 0.04, 0.06))
+	for k in 3:
+		var z: float = -0.45 + 0.3 * float(k)
+		pm.box(Vector3(-0.4, 0.05, z), Vector3(0.4, 0.07, z + 0.12), tint.darkened(0.4 + 0.15 * float(k)))
+	pm.box(Vector3(0.8, 0.0, -0.2), Vector3(1.0, 0.25, 0.9), tint.lightened(0.05))
+	return _wrap(pm, "OpenTomb")
+
+
+## A HOLE in the floor: a dark pit with a ragged rim in [param tint]. Walk-over (a warp on it drops you).
+static func hole(tint: Color = Color(0.5, 0.56, 0.62)) -> Node3D:
+	var pm := ProcMesh.new()
+	pm.box(Vector3(-0.62, 0.0, -0.62), Vector3(0.62, 0.09, 0.62), Color(0.02, 0.02, 0.04))
+	for k in 6:
+		var a: float = TAU * float(k) / 6.0
+		var c := Vector3(cos(a) * 0.72, 0.0, sin(a) * 0.72)
+		pm.box(c - Vector3(0.18, 0.0, 0.18), c + Vector3(0.18, 0.14, 0.18), tint.darkened(0.08 * float(k % 3)))
+	return _wrap(pm, "Hole")
+
+
+## GREAT ROOTS across the ground (walk-over): thick knotted roots in [param tint], jittered by [param seed].
+static func roots(tint: Color = Color(0.36, 0.26, 0.16), seed: int = 0) -> Node3D:
+	var pm := ProcMesh.new()
+	for k in 3:
+		var z: float = -0.6 + 0.6 * float(k) + (ProcMesh.hash01(seed, k, 3) - 0.5) * 0.3
+		var w: float = 0.12 + ProcMesh.hash01(seed, k, 4) * 0.08
+		pm.box(Vector3(-0.95, 0.0, z - w), Vector3(0.95, 0.16 + w, z + w), tint.darkened(0.1 * float(k)))
+		pm.box(Vector3(-0.2, 0.1, z - w * 1.4), Vector3(0.25, 0.3, z + w * 1.4), tint.lightened(0.05))
+	return _wrap(pm, "Roots")
+
+
+## A GREAT TREE: a massive old trunk with buttress roots and a dark crown. Solid.
+static func great_tree(tint: Color = Color(0.22, 0.34, 0.18)) -> Node3D:
+	var pm := ProcMesh.new()
+	var bark := Color(0.3, 0.22, 0.15)
+	pm.box(Vector3(-0.85, 0.0, -0.85), Vector3(0.85, 0.35, 0.85), bark.darkened(0.15))
+	pm.box(Vector3(-0.6, 0.0, -0.6), Vector3(0.6, 3.2, 0.6), bark)
+	pm.box(Vector3(-0.95, 0.0, -0.2), Vector3(-0.6, 0.6, 0.2), bark.darkened(0.1))
+	pm.box(Vector3(0.6, 0.0, -0.2), Vector3(0.95, 0.6, 0.2), bark.darkened(0.1))
+	pm.box(Vector3(-1.2, 2.8, -1.2), Vector3(1.2, 4.0, 1.2), tint, tint.lightened(0.08))
+	pm.box(Vector3(-0.85, 4.0, -0.85), Vector3(0.85, 4.6, 0.85), tint.darkened(0.06), tint.lightened(0.12))
+	return _wrap(pm, "GreatTree")
+
+
+## A WHIRLPOOL: rings of churning foam on the water in [param tint]. Walk-over (ridden into).
+static func whirlpool(tint: Color = Color(0.7, 0.9, 1.0)) -> Node3D:
+	var root := Node3D.new()
+	root.name = "Whirlpool"
+	for k in 3:
+		var mi := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.2 + 0.25 * float(k)
+		torus.outer_radius = 0.32 + 0.25 * float(k)
+		torus.rings = 20
+		torus.ring_segments = 4
+		mi.mesh = torus
+		mi.scale = Vector3(1.0, 0.15, 1.0)
+		mi.position = Vector3(0.0, 0.06 - 0.02 * float(k), 0.0)
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.albedo_color = Color(tint.r, tint.g, tint.b, 0.7 - 0.18 * float(k))
+		mi.material_override = mat
+		root.add_child(mi)
+	return root
+
+
+## A dropped NOTE ([SignEntity] look "note"): a crumpled scrap of paper on the ground, a pebble on it.
+static func note() -> Node3D:
+	var pm := ProcMesh.new()
+	var paper := Color(0.94, 0.9, 0.78)
+	pm.quad(Vector3(-0.3, 0.03, -0.22), Vector3(0.28, 0.05, -0.26), Vector3(0.32, 0.03, 0.2), Vector3(-0.26, 0.06, 0.24),
+		Vector3.UP, paper)
+	pm.quad(Vector3(-0.05, 0.05, -0.24), Vector3(0.3, 0.09, -0.1), Vector3(0.32, 0.04, 0.2), Vector3(0.0, 0.06, 0.06),
+		Vector3.UP, paper.darkened(0.08))
+	pm.box(Vector3(0.12, 0.04, -0.06), Vector3(0.24, 0.13, 0.06), Color(0.5, 0.36, 0.28))
+	return _wrap(pm, "Note")
+
+
+## The foam ring round a ridden mount on the water (a soft white band at the waterline).
+static func wake_ring() -> Node3D:
+	var mi := MeshInstance3D.new()
+	mi.name = "Wake"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.75
+	torus.outer_radius = 1.0
+	torus.rings = 24
+	torus.ring_segments = 6
+	mi.mesh = torus
+	mi.scale = Vector3(1.0, 0.12, 1.0)
+	mi.position = Vector3(0.0, 0.08, 0.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(0.95, 0.98, 1.0, 0.55)
+	mi.material_override = mat
+	return mi
 
 
 ## THE TOURNAMENT ARENA (DECISIONS.md #33): an elliptical stone drum filling the footprint -- an

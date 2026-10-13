@@ -1,0 +1,85 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_ci0yp"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_j6bcx"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="3_5kj64"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="4_dhqph"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="5_0p1aa"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/volcano_path/terrain.tres" id="6_3xmaq"]
+
+[sub_resource type="Resource" id="Resource_x76ti"]
+script = ExtResource("2_j6bcx")
+character_id = &"monster"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_telyc"]
+script = ExtResource("2_j6bcx")
+character_id = &"blightcap"
+
+[sub_resource type="Resource" id="Resource_dw6vf"]
+script = ExtResource("1_ci0yp")
+tile_ids = Array[StringName]([&"ash_field"])
+table = Array[Resource]([SubResource("Resource_x76ti"), SubResource("Resource_telyc")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_xyxhd"]
+script = ExtResource("3_5kj64")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"vent_fire_5_2"
+cell = Vector3i(5, 2, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_ppcq6"]
+script = ExtResource("3_5kj64")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"vent_fire_10_3"
+cell = Vector3i(10, 3, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_vgvb6"]
+script = ExtResource("3_5kj64")
+prop = "fire"
+footprint = Vector2i(1, 1)
+id = &"vent_fire_10_13"
+cell = Vector3i(10, 13, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_q5weq"]
+script = ExtResource("4_dhqph")
+area_rect = Rect2i(7, 19, 1, 1)
+target_area = &"stormreef_waters_erupted"
+target_entry = &"volcano_door"
+id = &"south_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_kqmna"]
+script = ExtResource("4_dhqph")
+area_rect = Rect2i(6, 0, 1, 1)
+target_area = &"volcano_crater"
+target_entry = &"south"
+id = &"north_exit"
+blocking = false
+
+[resource]
+script = ExtResource("5_0p1aa")
+area_id = &"volcano_path"
+display_name = "The Volcano"
+terrain = ExtResource("6_3xmaq")
+kind = 3
+region_id = &"open_ocean"
+world_map_pos = Vector2(0.645, 0.8)
+entry_points = {
+"north": {
+"cell": [6, 1, 0],
+"facing": "south"
+},
+"south": {
+"cell": [7, 18, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_xyxhd"), SubResource("Resource_ppcq6"), SubResource("Resource_vgvb6"), SubResource("Resource_q5weq"), SubResource("Resource_kqmna")])
+encounter_zones = Array[Resource]([SubResource("Resource_dw6vf")])
+level_band = Vector2i(30, 40)

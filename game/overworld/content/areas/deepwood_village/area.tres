@@ -132,7 +132,7 @@ script = ExtResource("4_e6kcc")
 speaker_id = &"npc_nyra"
 speaker_name = "Nyra"
 side = &"right"
-text = "The deep forest turns travellers round. Follow the lights -- every other way leads you back."
+text = "The deep forest turns travellers round. Follow the deepest roots and the greatest trees -- every other way leads you astray."
 
 [sub_resource type="Resource" id="Resource_hyboc"]
 script = ExtResource("5_ylcjc")
@@ -190,7 +190,7 @@ opponent_team = Array[Dictionary]([{
 "character_id": "vineweave",
 "strength": 1.0
 }, {
-"character_id": "oakheart",
+"character_id": "blightcap",
 "strength": 1.15
 }])
 reward_gold = 400
@@ -246,7 +246,7 @@ script = ExtResource("4_e6kcc")
 speaker_id = &"npc_nyra"
 speaker_name = "Nyra"
 side = &"right"
-text = "The deep forest turns travellers round. Follow the lights -- every other way leads you back."
+text = "The deep forest turns travellers round. Follow the deepest roots and the greatest trees -- every other way leads you astray."
 
 [sub_resource type="Resource" id="Resource_7d41m"]
 script = ExtResource("5_ylcjc")

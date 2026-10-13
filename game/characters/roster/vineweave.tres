@@ -14,7 +14,7 @@
 [resource]
 script = ExtResource("1_char")
 character_id = &"vineweave"
-element = &"nature"
+element = &"plant"
 display_name = "Vineweave"
 description = "A warrior grown rather than armed. Where hands should be, Vineweave carries a living tangle of vine that answers its will -- braiding into a blade to cleave a line of foes, a lattice shield to turn a blow, a taut bow to loose a barbed shot, or roots that burst the ground and bind an enemy where it stands."
 model_scene = ExtResource("2_model")

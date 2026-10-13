@@ -60,6 +60,77 @@
 			]
 		},
 		{
+			"id": "sea_chief",
+			"title": "The Sea Chief",
+			"category": "main",
+			"summary": "Placeholder: Eloi, the chief of Beach Village, can teach the power to cross the sea -- if you beat him.",
+			"location": "beach_village",
+			"area": "beach_village",
+			"start_flag": "opening.complete",
+			"complete_flag": "beach.tideride_learned",
+			"steps": [
+				{"flag": "beach.arrived", "text": "Take the coast road from Crownhaven's harbour gate to Beach Village.", "location": "beach_village", "area": "beach_village"},
+				{"flag": "beach.eloi_beaten", "text": "Find Eloi, the chief of Beach Village, and battle him.", "location": "beach_village", "area": "beach_village", "npc": "eloi"},
+				{"flag": "beach.tideride_learned", "text": "Have Eloi teach the sea-crossing move to one of your creatures.", "location": "beach_village", "area": "beach_village", "npc": "eloi"}
+			]
+		},
+		{
+			"id": "sleeping_village",
+			"title": "The Sleeping Village",
+			"category": "main",
+			"summary": "Placeholder: everyone in Frostpeak Village is asleep, and nobody will wake.",
+			"location": "frostpeak_village",
+			"area": "frostpeak_village",
+			"start_flag": "frostpeak.arrived",
+			"complete_flag": "frostpeak.awake",
+			"steps": [
+				{"flag": "frostpeak.dreaming", "text": "Rest in an empty bed at Frostpeak's inn.", "location": "frostpeak_village", "area": "frostpeak_inn"},
+				{"flag": "frostpeak.saevi_beaten", "text": "In the dream, face Saevi, the chief of Frostpeak.", "location": "frostpeak_village", "area": "frostpeak_dream", "npc": "saevi"},
+				{"flag": "frostpeak.awake", "text": "Face the two creatures playing in the village's dreams.", "location": "frostpeak_village", "area": "frostpeak_dream"}
+			]
+		},
+		{
+			"id": "strange_sightings",
+			"title": "Strange Sightings",
+			"category": "main",
+			"summary": "Placeholder: in Redrock Village they talk of strange people going out into the badlands and the desert.",
+			"location": "redrock_village",
+			"area": "redrock_village",
+			"start_flag": "redrock.arrived",
+			"complete_flag": "badlands.hideout_cleared",
+			"steps": [
+				{"flag": "badlands.figure_entered", "text": "Look for the strangers in the Red Desert, south of Redrock -- and follow one.", "location": "red_desert", "area": "red_desert"},
+				{"flag": "badlands.hideout_open", "text": "The cave seems to end in solid rock. Find a way past it.", "location": "red_desert", "area": "badlands_cave"},
+				{"flag": "badlands.hideout_cleared", "text": "Go through the hideout to its end.", "location": "secret_hideout", "area": "badlands_hideout"}
+			]
+		},
+		{
+			"id": "risen_island",
+			"title": "The Risen Island",
+			"category": "side",
+			"summary": "Placeholder: a volcano has erupted off Stormreef Isle, and a new island stands in the sea.",
+			"location": "stormreef_waters",
+			"area": "stormreef_waters_erupted",
+			"start_flag": "postgame.hidden_depths_awakened",
+			"complete_flag": "postgame.volcano_legend_beaten",
+			"steps": [
+				{"flag": "postgame.volcano_legend_beaten", "text": "Ride the sea south from Beach Village to the new island, and climb its volcano.", "location": "stormreef_waters", "area": "volcano_crater", "npc": "volcano_legend"}
+			]
+		},
+		{
+			"id": "frozen_cave",
+			"title": "The Frozen Cave",
+			"category": "side",
+			"summary": "Placeholder: a blizzard covers the Snowy Peaks, and the ice that sealed a cave on the high trail has broken away.",
+			"location": "snowy_peaks",
+			"area": "snowy_peaks",
+			"start_flag": "postgame.hidden_depths_awakened",
+			"complete_flag": "postgame.glacier_legend_beaten",
+			"steps": [
+				{"flag": "postgame.glacier_legend_beaten", "text": "Climb the high trail north of Frostpeak and find your way down through the frozen cave.", "location": "frozen_cave", "area": "glacier_cave_3", "npc": "glacier_legend"}
+			]
+		},
+		{
 			"id": "mossway_ambush",
 			"title": "Trouble on the Mossway",
 			"category": "side",

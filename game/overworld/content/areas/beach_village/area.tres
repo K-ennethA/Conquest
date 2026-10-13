@@ -1,0 +1,581 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_ljn4a"]
+[ext_resource type="Script" path="res://game/overworld/data/WayshrineEntity.gd" id="2_6bj5l"]
+[ext_resource type="Script" path="res://game/overworld/data/SignEntity.gd" id="3_6tglu"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="4_1dkod"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="5_7gb3d"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="6_xsfip"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/TeachFieldMoveCommand.gd" id="7_ugvv0"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="8_q3kho"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartDuelCommand.gd" id="9_k2ka1"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="10_ifldm"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="11_t6nm2"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="12_mbgsh"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="13_4bbdn"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SetFlagCommand.gd" id="14_utc8u"]
+[ext_resource type="Script" path="res://game/overworld/data/ChestEntity.gd" id="15_6hdb0"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="16_0wbow"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="17_b8xsf"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/beach_village/terrain.tres" id="18_ujjtg"]
+
+[sub_resource type="Resource" id="Resource_64a66"]
+script = ExtResource("1_ljn4a")
+prop = "cabin"
+footprint = Vector2i(3, 2)
+id = &"hut_0"
+cell = Vector3i(2, 4, 0)
+tint = Color(0.56, 0.46, 0.34, 1)
+
+[sub_resource type="Resource" id="Resource_d4540"]
+script = ExtResource("1_ljn4a")
+prop = "cabin"
+footprint = Vector2i(3, 2)
+id = &"hut_1"
+cell = Vector3i(9, 4, 0)
+tint = Color(0.392, 0.536, 0.648, 1)
+
+[sub_resource type="Resource" id="Resource_0pb6q"]
+script = ExtResource("1_ljn4a")
+prop = "cabin"
+footprint = Vector2i(3, 2)
+id = &"hut_2"
+cell = Vector3i(13, 6, 0)
+tint = Color(0.56, 0.46, 0.34, 1)
+
+[sub_resource type="Resource" id="Resource_0ygtp"]
+script = ExtResource("1_ljn4a")
+footprint = Vector2i(5, 3)
+id = &"eloi_house"
+cell = Vector3i(19, 3, 0)
+tint = Color(0.24, 0.42, 0.56, 1)
+
+[sub_resource type="Resource" id="Resource_bd5j2"]
+script = ExtResource("1_ljn4a")
+prop = "banner"
+footprint = Vector2i(1, 1)
+id = &"banner_eloi"
+cell = Vector3i(18, 5, 0)
+tint = Color(0.24, 0.42, 0.56, 1)
+
+[sub_resource type="Resource" id="Resource_uerov"]
+script = ExtResource("1_ljn4a")
+prop = "palm"
+footprint = Vector2i(1, 1)
+id = &"palm_1_9"
+cell = Vector3i(1, 9, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_lqtdm"]
+script = ExtResource("1_ljn4a")
+prop = "palm"
+footprint = Vector2i(1, 1)
+id = &"palm_26_8"
+cell = Vector3i(26, 8, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_88q3x"]
+script = ExtResource("1_ljn4a")
+prop = "palm"
+footprint = Vector2i(1, 1)
+id = &"palm_18_9"
+cell = Vector3i(18, 9, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_iqqmw"]
+script = ExtResource("1_ljn4a")
+prop = "palm"
+footprint = Vector2i(1, 1)
+id = &"palm_8_8"
+cell = Vector3i(8, 8, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_1ivbc"]
+script = ExtResource("1_ljn4a")
+prop = "palm"
+footprint = Vector2i(1, 1)
+id = &"palm_24_17"
+cell = Vector3i(24, 17, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_7qm5g"]
+script = ExtResource("1_ljn4a")
+prop = "boat"
+footprint = Vector2i(1, 1)
+id = &"boat_3_12"
+cell = Vector3i(3, 12, 0)
+tint = Color(0.24, 0.42, 0.56, 1)
+
+[sub_resource type="Resource" id="Resource_dux13"]
+script = ExtResource("1_ljn4a")
+prop = "boat"
+footprint = Vector2i(1, 1)
+id = &"boat_24_12"
+cell = Vector3i(24, 12, 0)
+tint = Color(0.56, 0.46, 0.34, 1)
+
+[sub_resource type="Resource" id="Resource_2cv2l"]
+script = ExtResource("1_ljn4a")
+prop = "barrels"
+footprint = Vector2i(1, 1)
+id = &"barrels_pier"
+cell = Vector3i(8, 12, 0)
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_ayjti"]
+script = ExtResource("1_ljn4a")
+prop = "logs"
+footprint = Vector2i(1, 1)
+id = &"nets"
+cell = Vector3i(15, 12, 0)
+tint = Color(0.56, 0.46, 0.34, 1)
+
+[sub_resource type="Resource" id="Resource_jvotu"]
+script = ExtResource("1_ljn4a")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"lamp_5_10"
+cell = Vector3i(5, 10, 0)
+tint = Color(1, 0.82, 0.45, 1)
+
+[sub_resource type="Resource" id="Resource_wbv02"]
+script = ExtResource("1_ljn4a")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+id = &"lamp_16_10"
+cell = Vector3i(16, 10, 0)
+tint = Color(1, 0.82, 0.45, 1)
+
+[sub_resource type="Resource" id="Resource_3mlkf"]
+script = ExtResource("2_6bj5l")
+id = &"wayshrine"
+cell = Vector3i(11, 9, 0)
+display_name = "Beach Wayshrine"
+tint = Color(0.55, 0.92, 0.62, 1)
+
+[sub_resource type="Resource" id="Resource_qxtmr"]
+script = ExtResource("3_6tglu")
+text = "BEACH VILLAGE
+North: Crownhaven.  West: River Crossing."
+id = &"village_sign"
+cell = Vector3i(4, 8, 0)
+display_name = "Beach Village"
+tint = Color(0.52, 0.36, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_wvyig"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+side = &"right"
+text = "None of yours can learn Tideride yet. Come back with a creature that can."
+
+[sub_resource type="Resource" id="Resource_80n83"]
+script = ExtResource("5_7gb3d")
+beats = Array[Resource]([SubResource("Resource_wvyig")])
+
+[sub_resource type="Resource" id="Resource_ia2ya"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+side = &"right"
+text = "Face the water and call on Tideride. Step onto any shore to come back to land."
+
+[sub_resource type="Resource" id="Resource_pupgq"]
+script = ExtResource("5_7gb3d")
+beats = Array[Resource]([SubResource("Resource_ia2ya")])
+
+[sub_resource type="Resource" id="Resource_pmdo4"]
+script = ExtResource("6_xsfip")
+condition = "knows_field_move(\"tideride\")"
+then_commands = Array[Resource]([SubResource("Resource_pupgq")])
+else_commands = Array[Resource]([SubResource("Resource_80n83")])
+
+[sub_resource type="Resource" id="Resource_6h6dh"]
+script = ExtResource("7_ugvv0")
+move_id = &"tideride"
+learned_flag = "beach.tideride_learned"
+
+[sub_resource type="Resource" id="Resource_wdwdd"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+side = &"right"
+text = "Shall I teach {move} to another of yours?"
+
+[sub_resource type="Resource" id="Resource_kcjrb"]
+script = ExtResource("7_ugvv0")
+move_id = &"tideride"
+prompt = SubResource("Resource_wdwdd")
+learned_flag = "beach.tideride_learned"
+
+[sub_resource type="Resource" id="Resource_hxuqw"]
+script = ExtResource("6_xsfip")
+condition = "knows_field_move(\"tideride\")"
+then_commands = Array[Resource]([SubResource("Resource_kcjrb")])
+else_commands = Array[Resource]([SubResource("Resource_6h6dh")])
+
+[sub_resource type="Resource" id="Resource_nc6qc"]
+script = ExtResource("6_xsfip")
+condition = "can_learn_field_move(\"tideride\")"
+then_commands = Array[Resource]([SubResource("Resource_hxuqw")])
+else_commands = Array[Resource]([SubResource("Resource_pmdo4")])
+
+[sub_resource type="Resource" id="Resource_nq134"]
+script = ExtResource("8_q3kho")
+
+[sub_resource type="Resource" id="Resource_eb25t"]
+script = ExtResource("10_ifldm")
+kind = 1
+encounter_id = "beach.chief.eloi"
+opponent_name = "Eloi"
+opponent_speaker_id = &"npc_eloi"
+opponent_team = Array[Dictionary]([{
+"character_id": "mycothrall",
+"strength": 1.0
+}, {
+"character_id": "gem_knight",
+"strength": 1.0
+}, {
+"character_id": "vineweave",
+"strength": 1.15
+}])
+reward_gold = 500
+reward_flags = Array[String](["beach.eloi_beaten", "fieldmove.tideride"])
+clash_intro = true
+boss_battle = true
+level_mode = 1
+scale_offset = 1
+scale_min = 12
+scale_max = 20
+
+[sub_resource type="Resource" id="Resource_x87le"]
+script = ExtResource("9_k2ka1")
+spec = SubResource("Resource_eb25t")
+
+[sub_resource type="Resource" id="Resource_vti57"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+side = &"right"
+text = "Well fought. The sea will carry you now -- let me show one of yours how."
+
+[sub_resource type="Resource" id="Resource_1f0ps"]
+script = ExtResource("5_7gb3d")
+beats = Array[Resource]([SubResource("Resource_vti57")])
+
+[sub_resource type="Resource" id="Resource_oechq"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+side = &"right"
+text = "None of yours can learn Tideride yet. Come back with a creature that can."
+
+[sub_resource type="Resource" id="Resource_qayoo"]
+script = ExtResource("5_7gb3d")
+beats = Array[Resource]([SubResource("Resource_oechq")])
+
+[sub_resource type="Resource" id="Resource_7nobe"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+side = &"right"
+text = "Which of yours will learn {move}?"
+
+[sub_resource type="Resource" id="Resource_k5tui"]
+script = ExtResource("7_ugvv0")
+move_id = &"tideride"
+prompt = SubResource("Resource_7nobe")
+learned_flag = "beach.tideride_learned"
+
+[sub_resource type="Resource" id="Resource_epahw"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+side = &"right"
+text = "Face the water and call on Tideride. Step onto any shore to come back to land."
+
+[sub_resource type="Resource" id="Resource_kv47t"]
+script = ExtResource("5_7gb3d")
+beats = Array[Resource]([SubResource("Resource_epahw")])
+
+[sub_resource type="Resource" id="Resource_r8rlu"]
+script = ExtResource("6_xsfip")
+condition = "knows_field_move(\"tideride\")"
+then_commands = Array[Resource]([SubResource("Resource_kv47t")])
+
+[sub_resource type="Resource" id="Resource_0d1be"]
+script = ExtResource("6_xsfip")
+condition = "can_learn_field_move(\"tideride\")"
+then_commands = Array[Resource]([SubResource("Resource_k5tui"), SubResource("Resource_r8rlu")])
+else_commands = Array[Resource]([SubResource("Resource_qayoo")])
+
+[sub_resource type="Resource" id="Resource_oot2p"]
+script = ExtResource("8_q3kho")
+
+[sub_resource type="Resource" id="Resource_s58de"]
+script = ExtResource("6_xsfip")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_1f0ps"), SubResource("Resource_0d1be"), SubResource("Resource_oot2p")])
+
+[sub_resource type="Resource" id="Resource_5exb4"]
+script = ExtResource("11_t6nm2")
+label = "Battle!"
+commands = Array[Resource]([SubResource("Resource_x87le"), SubResource("Resource_s58de")])
+
+[sub_resource type="Resource" id="Resource_adf6i"]
+script = ExtResource("11_t6nm2")
+label = "Not yet."
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_kpwhh"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+side = &"right"
+text = "I'm Eloi, chief of this village. Show me your strength, and the sea is yours to cross. Ready?"
+
+[sub_resource type="Resource" id="Resource_55l4c"]
+script = ExtResource("12_mbgsh")
+prompt = SubResource("Resource_kpwhh")
+options = Array[Resource]([SubResource("Resource_5exb4"), SubResource("Resource_adf6i")])
+
+[sub_resource type="Resource" id="Resource_32k5q"]
+script = ExtResource("6_xsfip")
+condition = "not has(\"beach.eloi_beaten\")"
+then_commands = Array[Resource]([SubResource("Resource_55l4c")])
+else_commands = Array[Resource]([SubResource("Resource_nc6qc"), SubResource("Resource_nq134")])
+
+[sub_resource type="Resource" id="Resource_03t0i"]
+script = ExtResource("13_4bbdn")
+speaker_id = &"npc_eloi"
+speaker_name = "Eloi"
+figure = "elder"
+id = &"eloi"
+cell = Vector3i(21, 7, 0)
+display_name = "Eloi"
+tint = Color(0.24, 0.4, 0.56, 1)
+on_interact = Array[Resource]([SubResource("Resource_32k5q")])
+
+[sub_resource type="Resource" id="Resource_qpe2j"]
+script = ExtResource("10_ifldm")
+kind = 1
+encounter_id = "beach.rival.cael"
+opponent_name = "Cael"
+opponent_speaker_id = &"npc_cael"
+opponent_team = Array[Dictionary]([{
+"character_id": "mycothrall",
+"strength": 0.95
+}, {
+"character_id": "petalfang",
+"strength": 0.85
+}])
+reward_gold = 180
+defeat_policy = 1
+clash_intro = true
+spar = true
+level_mode = 1
+scale_min = 12
+scale_max = 20
+
+[sub_resource type="Resource" id="Resource_fdghc"]
+script = ExtResource("9_k2ka1")
+spec = SubResource("Resource_qpe2j")
+
+[sub_resource type="Resource" id="Resource_lbtxr"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_cael"
+speaker_name = "Cael"
+side = &"right"
+text = "Your partner needs rest first. Find me after."
+
+[sub_resource type="Resource" id="Resource_5oevg"]
+script = ExtResource("5_7gb3d")
+beats = Array[Resource]([SubResource("Resource_lbtxr")])
+
+[sub_resource type="Resource" id="Resource_ri7b1"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_cael"
+speaker_name = "Cael"
+side = &"right"
+text = "Good bout. Let's do it again sometime."
+
+[sub_resource type="Resource" id="Resource_x4hqf"]
+script = ExtResource("5_7gb3d")
+beats = Array[Resource]([SubResource("Resource_ri7b1")])
+
+[sub_resource type="Resource" id="Resource_seqgi"]
+script = ExtResource("14_utc8u")
+key = "beach.cael_sparred"
+
+[sub_resource type="Resource" id="Resource_yu6bk"]
+script = ExtResource("8_q3kho")
+
+[sub_resource type="Resource" id="Resource_5wrn6"]
+script = ExtResource("6_xsfip")
+condition = "outcome() == \"victory\" or outcome() == \"defeat\""
+then_commands = Array[Resource]([SubResource("Resource_x4hqf"), SubResource("Resource_seqgi"), SubResource("Resource_yu6bk")])
+else_commands = Array[Resource]([SubResource("Resource_5oevg")])
+
+[sub_resource type="Resource" id="Resource_uw2lc"]
+script = ExtResource("11_t6nm2")
+label = "Let's go."
+commands = Array[Resource]([SubResource("Resource_fdghc"), SubResource("Resource_5wrn6")])
+
+[sub_resource type="Resource" id="Resource_3t5hp"]
+script = ExtResource("11_t6nm2")
+label = "Not now."
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_p70bk"]
+script = ExtResource("4_1dkod")
+speaker_id = &"npc_cael"
+speaker_name = "Cael"
+side = &"right"
+text = "Want a friendly bout, to see how far we've both come?"
+
+[sub_resource type="Resource" id="Resource_sr1sw"]
+script = ExtResource("12_mbgsh")
+prompt = SubResource("Resource_p70bk")
+options = Array[Resource]([SubResource("Resource_uw2lc"), SubResource("Resource_3t5hp")])
+
+[sub_resource type="Resource" id="Resource_b21k8"]
+script = ExtResource("6_xsfip")
+condition = "not has(\"beach.cael_sparred\")"
+then_commands = Array[Resource]([SubResource("Resource_sr1sw")])
+
+[sub_resource type="Resource" id="Resource_x1uri"]
+script = ExtResource("13_4bbdn")
+speaker_id = &"npc_cael"
+speaker_name = "Cael"
+figure = "trainer"
+id = &"cael"
+cell = Vector3i(7, 10, 0)
+facing = "east"
+display_name = "Cael"
+tint = Color(0.42, 0.52, 0.66, 1)
+on_interact = Array[Resource]([SubResource("Resource_b21k8")])
+
+[sub_resource type="Resource" id="Resource_rer3r"]
+script = ExtResource("13_4bbdn")
+speaker_id = &"npc_bv_fisher"
+speaker_name = "Fisher"
+figure = "villager"
+id = &"bv_fisher"
+cell = Vector3i(6, 18, 0)
+display_name = "Fisher"
+tint = Color(0.3, 0.46, 0.56, 1)
+
+[sub_resource type="Resource" id="Resource_hl4t0"]
+script = ExtResource("13_4bbdn")
+speaker_id = &"npc_bv_net_mender"
+speaker_name = "Net Mender"
+figure = "villager"
+id = &"bv_net_mender"
+cell = Vector3i(14, 9, 0)
+facing = "west"
+display_name = "Net Mender"
+tint = Color(0.6, 0.5, 0.36, 1)
+
+[sub_resource type="Resource" id="Resource_4kgrh"]
+script = ExtResource("13_4bbdn")
+speaker_id = &"npc_bv_harbour_hand"
+speaker_name = "Harbour Hand"
+figure = "villager"
+id = &"bv_harbour_hand"
+cell = Vector3i(16, 18, 0)
+facing = "west"
+display_name = "Harbour Hand"
+tint = Color(0.4, 0.4, 0.46, 1)
+
+[sub_resource type="Resource" id="Resource_xx6nx"]
+script = ExtResource("13_4bbdn")
+speaker_id = &"npc_bv_child"
+speaker_name = "Beach Child"
+figure = "child"
+id = &"bv_child"
+cell = Vector3i(4, 9, 0)
+facing = "east"
+display_name = "Beach Child"
+tint = Color(0.86, 0.6, 0.36, 1)
+
+[sub_resource type="Resource" id="Resource_2hqfx"]
+script = ExtResource("15_6hdb0")
+loot_items = Array[StringName]([&"dawnpetal_draught", &"clearwater_draught"])
+loot_gold = 120
+id = &"islet_chest"
+cell = Vector3i(23, 17, 0)
+facing = "north"
+display_name = "Chest"
+tint = Color(0.42, 0.3, 0.18, 1)
+
+[sub_resource type="Resource" id="Resource_5ykb0"]
+script = ExtResource("16_0wbow")
+area_rect = Rect2i(6, 0, 1, 1)
+target_area = &"crownhaven"
+target_entry = &"harbour_gate"
+id = &"north_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_xxvwf"]
+script = ExtResource("16_0wbow")
+area_rect = Rect2i(0, 7, 1, 1)
+target_area = &"river_crossing"
+target_entry = &"east_road"
+id = &"west_exit"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_c68pq"]
+script = ExtResource("16_0wbow")
+area_rect = Rect2i(10, 21, 4, 1)
+target_area = &"stormreef_waters"
+target_entry = &"north"
+id = &"sea_route"
+blocking = false
+visible_if = "not (has(\"postgame.hidden_depths_awakened\"))"
+
+[sub_resource type="Resource" id="Resource_b0knc"]
+script = ExtResource("16_0wbow")
+area_rect = Rect2i(10, 21, 4, 1)
+target_area = &"stormreef_waters_erupted"
+target_entry = &"north"
+id = &"sea_route_erupted"
+blocking = false
+visible_if = "has(\"postgame.hidden_depths_awakened\")"
+
+[sub_resource type="Resource" id="Resource_pfuns"]
+script = ExtResource("14_utc8u")
+key = "beach.arrived"
+
+[sub_resource type="Resource" id="Resource_jce2u"]
+script = ExtResource("6_xsfip")
+condition = "not has(\"beach.arrived\")"
+then_commands = Array[Resource]([SubResource("Resource_pfuns")])
+
+[resource]
+script = ExtResource("17_b8xsf")
+area_id = &"beach_village"
+display_name = "Beach Village"
+terrain = ExtResource("18_ujjtg")
+region_id = &"sunlit_coast"
+world_map_pos = Vector2(0.678, 0.685)
+entry_points = {
+"north_road": {
+"cell": [6, 1, 0],
+"facing": "south"
+},
+"sea_route": {
+"cell": [11, 20, 0],
+"facing": "north"
+},
+"wayshrine": {
+"cell": [11, 10, 0],
+"facing": "north"
+},
+"west_road": {
+"cell": [1, 7, 0],
+"facing": "east"
+}
+}
+entities = Array[Resource]([SubResource("Resource_64a66"), SubResource("Resource_d4540"), SubResource("Resource_0pb6q"), SubResource("Resource_0ygtp"), SubResource("Resource_bd5j2"), SubResource("Resource_uerov"), SubResource("Resource_lqtdm"), SubResource("Resource_88q3x"), SubResource("Resource_iqqmw"), SubResource("Resource_1ivbc"), SubResource("Resource_7qm5g"), SubResource("Resource_dux13"), SubResource("Resource_2cv2l"), SubResource("Resource_ayjti"), SubResource("Resource_jvotu"), SubResource("Resource_wbv02"), SubResource("Resource_3mlkf"), SubResource("Resource_qxtmr"), SubResource("Resource_03t0i"), SubResource("Resource_x1uri"), SubResource("Resource_rer3r"), SubResource("Resource_hl4t0"), SubResource("Resource_4kgrh"), SubResource("Resource_xx6nx"), SubResource("Resource_2hqfx"), SubResource("Resource_5ykb0"), SubResource("Resource_xxvwf"), SubResource("Resource_c68pq"), SubResource("Resource_b0knc")])
+on_enter = Array[Resource]([SubResource("Resource_jce2u")])
+level_band = Vector2i(12, 20)

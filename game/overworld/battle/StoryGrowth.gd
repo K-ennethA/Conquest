@@ -176,7 +176,7 @@ static func evolution_context(state: StoryState, extra: Dictionary = {}) -> Dict
 		ctx["area_id"] = area_id
 		var area: OverworldAreaResource = OverworldAreaResource.load_by_id(area_id)
 		ctx["region_id"] = String(area.region_id) if area != null else ""
-		ctx["weather"] = area.weather_id() if area != null else ""
+		ctx["weather"] = area.weather_id_for(state) if area != null else ""
 		var party: Array = []
 		for m in state.party:
 			party.append({"member_id": m.member_id, "character_id": m.character_id, "line": m.line})

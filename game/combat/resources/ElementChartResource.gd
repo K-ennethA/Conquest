@@ -39,6 +39,15 @@ class_name ElementChartResource
 ## strip a comment; this survives.
 @export_multiline var notes: String = ""
 
+## TWO-TYPE DEFENDERS (owner, 2026-10-12: "like Pokémon logic", on the game's milder scale).
+## A creature may carry a second element ([member CharacterResource.element2]). Against two
+## types each one is a STEP: +1 when the attacker is strong into it, -1 when resisted, 0
+## when neutral. The steps add and this table maps the total to the multiplier, so a
+## weakness and a resist cancel exactly (Pokémon's 2 x 0.5) and two weaknesses stack
+## (×1.5) without Pokémon's ×4. Keys are the step totals as ints; a missing key falls
+## back to the product of the two matrix entries. A one-type defender never reads this.
+@export var dual_step_multipliers: Dictionary = {2: 1.5, 1: 1.25, 0: 1.0, -1: 0.75, -2: 0.5}
+
 @export_group("Environment")
 ## Multiplier when the move's element matches an element of the tile the target stands
 ## on (a fire move into a target standing in flames). Independent of the matrix.
@@ -91,6 +100,49 @@ func multiplier(attacker_element, defender_element) -> float:
 	if not (row is Dictionary):
 		return neutral()
 	return _sane((row as Dictionary).get(def, null), neutral())
+
+
+## Multiplier for [param attacker_element] striking a defender with every element in
+## [param defender_elements] (one or two; empties and duplicates are dropped). One type is
+## exactly [method multiplier]; two types use the STEP rule ([member dual_step_multipliers]):
+## a neutral side leaves the other's authored value untouched, and two non-neutral sides
+## add their steps. No defender element at all is neutral.
+func multiplier_vs(attacker_element, defender_elements) -> float:
+	var defs: Array[StringName] = distinct_keys(defender_elements)
+	if defs.is_empty():
+		return neutral()
+	if defs.size() == 1:
+		return multiplier(attacker_element, defs[0])
+	var a := multiplier(attacker_element, defs[0])
+	var b := multiplier(attacker_element, defs[1])
+	var base := neutral()
+	if is_equal_approx(a, base):
+		return b
+	if is_equal_approx(b, base):
+		return a
+	var steps: int = _step(a, base) + _step(b, base)
+	var mapped: Variant = dual_step_multipliers.get(steps, null)
+	return _sane(mapped, a * b) if mapped != null else a * b
+
+
+## [param values] (an element, or an Array of them) as distinct non-empty keys, in order,
+## capped at two -- the shape [method multiplier_vs] reads a defender as.
+static func distinct_keys(values) -> Array[StringName]:
+	var out: Array[StringName] = []
+	var list: Array = values if values is Array else [values]
+	for v in list:
+		var k := key_of(v)
+		if k != &"" and not out.has(k):
+			out.append(k)
+		if out.size() == 2:
+			break
+	return out
+
+
+static func _step(mult: float, base: float) -> int:
+	if is_equal_approx(mult, base):
+		return 0
+	return 1 if mult > base else -1
 
 
 ## The value an unauthored pairing resolves to, guarded so a mis-authored

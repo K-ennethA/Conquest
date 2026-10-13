@@ -237,7 +237,7 @@ func test_contact_on_the_real_stage_returns_to_the_same_cell_with_the_duels_hp()
 	var e = Fix.entry("blightcap", EncounterEntry.Behaviour.WANDER)
 	e.move_chance = 0.0
 	var s := _journey(Fix.area([Fix.zone([e], 1)]), Vector3i(4, 4, 0), "east")
-	var lead: StoryPartyMember = s.member("vineweave")
+	var lead: StoryPartyMember = s.member("seedant")
 	var half: int = floori(lead.max_hp() * 0.5)
 	lead.current_hp = half
 	var ow := await _boot()

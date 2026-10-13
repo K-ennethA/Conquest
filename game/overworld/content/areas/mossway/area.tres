@@ -237,7 +237,7 @@ opponent_team = Array[Dictionary]([{
 "character_id": "petalfang",
 "strength": 0.85
 }, {
-"character_id": "undead",
+"character_id": "tree_grunt",
 "strength": 0.7
 }])
 reward_gold = 90

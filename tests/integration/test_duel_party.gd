@@ -185,7 +185,7 @@ func test_without_ko_replacement_the_next_member_enters_by_itself() -> void:
 
 
 func test_party_after_marks_every_member_that_fainted() -> void:
-	var req := DuelRequest.teams(["vineweave", "gem_knight", "petalfang", "oakheart"], ["monster", "undead"], _trio())
+	var req := DuelRequest.teams(["vineweave", "gem_knight", "petalfang", "blightcap"], ["monster", "undead"], _trio())
 	req.seed = 21
 	req.player_is_ai = true
 	req.foe_is_ai = true
@@ -311,7 +311,7 @@ static func _cmd_types_of(r: DuelResult) -> Array:
 func test_the_brain_switches_out_of_a_bad_matchup_at_normal() -> void:
 	# Petalfang (nature, frail) against a strong nature foe: resisted, and one hit from falling.
 	# Monster (dark, fast) on the bench matches up far better.
-	var req := DuelRequest.teams(["petalfang", "monster"], ["oakheart"], _trio())
+	var req := DuelRequest.teams(["petalfang", "monster"], ["vineweave"], _trio())
 	req.kind = DuelRequest.KIND_VERSUS
 	req.seed = 3
 	req.player_is_ai = true
@@ -350,7 +350,7 @@ func test_the_brain_switches_out_of_a_bad_matchup_at_normal() -> void:
 
 
 func test_the_brain_keeps_a_good_matchup_and_picks_the_best_replacement() -> void:
-	var req := DuelRequest.teams(["monster", "petalfang", "gem_knight"], ["oakheart"], _trio())
+	var req := DuelRequest.teams(["monster", "petalfang", "gem_knight"], ["vineweave"], _trio())
 	req.kind = DuelRequest.KIND_VERSUS
 	req.seed = 3
 	req.player_is_ai = true
@@ -385,7 +385,7 @@ func test_a_story_request_fields_the_party_as_a_team_and_a_trainer_team() -> voi
 			{"member_id": "m1", "character_id": "vineweave", "current_hp": -1},
 			{"member_id": "m2", "character_id": "blightcap", "current_hp": 20},
 			{"member_id": "m3", "character_id": "petalfang", "current_hp": -1},
-			{"member_id": "m4", "character_id": "oakheart", "current_hp": -1},
+			{"member_id": "m4", "character_id": "gem_knight", "current_hp": -1},
 		],
 		"opponent": {"name": "Fenna", "team": [{"character_id": "petalfang", "strength": 0.85},
 			{"character_id": "undead", "strength": 0.7}]},

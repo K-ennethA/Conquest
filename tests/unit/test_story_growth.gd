@@ -6,6 +6,17 @@ extends GutTest
 ## journey's flags, and the duel adapter / result speak the overworld contract (one wild foe,
 ## the encounter rules, the befriend offer only when the roll offered). No tree, no disk.
 
+## The test-only Barkling -> Mycothrall edge (Growth 3 + 2 wins), served beside the shipped content.
+const EvoFixture := preload("res://tests/helpers/evolution_fixture.gd")
+
+
+func before_each() -> void:
+	EvoFixture.install()
+
+
+func after_each() -> void:
+	EvoFixture.uninstall()
+
 
 func _win(entries: Array) -> BattleResult:
 	var r := BattleResult.make("mossway.grass.petalfang", BattleResult.OUTCOME_VICTORY)
@@ -30,11 +41,11 @@ func test_a_member_is_a_roster_ledger_record() -> void:
 	assert_eq(int(rec["growth"]), 2, "growth")
 	assert_eq(rec["evolved"], [], "no history yet")
 	assert_eq(rec["nickname"], "Sprig", "nickname")
-	rec["form"] = "oakheart"
+	rec["form"] = "mycothrall"
 	rec["growth"] = 3
-	rec["evolved"] = [{"edge": "tree_grunt__oakheart", "at": "x"}]
+	rec["evolved"] = [{"edge": String(EvoFixture.EDGE_ID), "at": "x"}]
 	m.apply_ledger_record(rec)
-	assert_eq(m.character_id, "oakheart", "the record's form becomes the member's character")
+	assert_eq(m.character_id, "mycothrall", "the record's form becomes the member's character")
 	assert_eq(m.member_id, "tree_grunt", "the member id never changes")
 	assert_eq(m.growth_points(), 3, "growth folded back")
 	assert_eq(m.evolution_history().size(), 1, "history folded back")
@@ -45,7 +56,7 @@ func test_an_m1_save_without_growth_still_loads() -> void:
 		"current_hp": 30, "growth": {}})
 	assert_not_null(m, "an M1 record (opaque empty growth) loads")
 	assert_eq(m.growth_points(), 0, "as zero Growth")
-	assert_eq(m.line, "vineweave", "its line defaults to the character's root")
+	assert_eq(m.line, "seedant", "its line defaults to the character's root (Vineweave evolves from Seedant)")
 	var keep := StoryPartyMember.from_dict({"member_id": "a", "character_id": "vineweave",
 		"growth": {"growth": 4.0, "bond": 7}})
 	assert_eq(keep.growth_points(), 4, "JSON floats read as ints")
@@ -54,8 +65,8 @@ func test_an_m1_save_without_growth_still_loads() -> void:
 
 func test_a_recruit_of_an_evolved_form_is_keyed_by_its_line() -> void:
 	var s := StoryState.new()
-	var m := s.add_member("oakheart")
-	assert_eq(m.line, "tree_grunt", "an Oakheart belongs to the Barkling line")
+	var m := s.add_member("mycothrall")
+	assert_eq(m.line, "tree_grunt", "a Mycothrall belongs to the Barkling line")
 	assert_eq(m.member_id, "tree_grunt", "and takes the line's uid")
 	assert_eq(s.add_member("tree_grunt").member_id, "tree_grunt#2", "the next of the line is #2")
 
@@ -92,12 +103,12 @@ func test_apply_awards_writes_the_member_and_reports_the_end_screen_rows() -> vo
 	var s := StoryState.new()
 	var bark := s.add_member("tree_grunt")
 	bark.add_growth(2)
-	bark.add_feats({"wins": 2})   # Barkling -> Oakheart: Growth 3 + 2 wins (EVOLUTION.md §3.2a)
-	s.add_member("vineweave")
+	bark.add_feats({"wins": 2})   # Barkling -> Mycothrall: Growth 3 + 2 wins (EVOLUTION.md §3.2a)
+	s.add_member("vineweave")   # member id "seedant": members are keyed by their line root
 	var preview: Array = StoryGrowth.preview_rows(s, {"tree_grunt": 1})
 	assert_eq(bark.growth_points(), 2, "a preview writes nothing")
 	assert_eq(preview.size(), 1, "one row")
-	var rows: Array = StoryGrowth.apply_awards(s, {"tree_grunt": 1, "vineweave": 1})
+	var rows: Array = StoryGrowth.apply_awards(s, {"tree_grunt": 1, "seedant": 1})
 	assert_eq(bark.growth_points(), 3, "applied")
 	assert_eq(int(rows[0]["total"]), 3, "the row's total")
 	assert_eq(int(rows[0]["goal"]), 3, "Barkling's goal")
@@ -111,17 +122,17 @@ func test_apply_awards_writes_the_member_and_reports_the_end_screen_rows() -> vo
 func test_story_battles_record_battle_feats() -> void:
 	var s := StoryState.new()
 	var bark := s.add_member("tree_grunt")
-	s.add_member("vineweave")
+	s.add_member("vineweave")   # member id "seedant": members are keyed by their line root
 	var low: int = maxi(1, int(bark.max_hp() * 0.2))
 	var r := _win([
 		{"member_id": "tree_grunt", "current_hp": low, "wounded": false, "kos": 2, "ko_elements": {"dark": 2}},
-		{"member_id": "vineweave", "current_hp": 0, "wounded": true, "kos": 0},
+		{"member_id": "seedant", "current_hp": 0, "wounded": true, "kos": 0},
 	])
 	var feats: Dictionary = StoryGrowth.feats_for(s, r, _rules(), StoryGrowth.gate_context())
 	assert_eq(int(feats["tree_grunt"]["wins"]), 1, "a win for the survivor")
 	assert_eq(int(feats["tree_grunt"]["clutch_wins"]), 1, "at 20% HP: a clutch win")
 	assert_eq(feats["tree_grunt"]["element_kos"], {"dark": 2}, "its KOs by element")
-	assert_eq(int(feats["vineweave"]["wins"]), 1, "a fallen member fought in the win too")
+	assert_eq(int(feats["seedant"]["wins"]), 1, "a fallen member fought in the win too")
 	assert_eq(StoryGrowth.feats_for(s, r, _rules(["skirmish"]), StoryGrowth.gate_context()), {},
 		"the same gates as Growth")
 	StoryGrowth.apply_feats(s, feats)
@@ -130,10 +141,10 @@ func test_story_battles_record_battle_feats() -> void:
 
 func test_a_duel_result_credits_its_defeated_foes_to_its_single_fighter() -> void:
 	var s := StoryState.new()
-	s.add_member("vineweave")
+	s.add_member("vineweave")   # member id "seedant": members are keyed by their line root
 	s.add_member("blightcap")
 	var r := _win([
-		{"member_id": "vineweave", "current_hp": -1, "wounded": false, "fought": true, "kos": 1},
+		{"member_id": "seedant", "current_hp": -1, "wounded": false, "fought": true, "kos": 1},
 		{"member_id": "blightcap", "current_hp": -1, "wounded": false, "fought": false},
 	])
 	r.defeated = ["petalfang"]

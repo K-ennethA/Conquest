@@ -37,9 +37,9 @@ func test_round_trip_through_json() -> void:
 	assert_eq(s.get_flag_int("quest.blight_road"), 1, "flags")
 	assert_true(s.get_flag("quest.blight_road") is int, "an int flag is an int again")
 	assert_eq(s.party.size(), 3, "party")
-	assert_eq(s.member("vineweave").current_hp, 41, "member HP")
-	assert_eq(s.member("vineweave").item_id, "heartwood_charm", "member item")
-	assert_eq(int(s.member("vineweave").growth.get("growth", 0)), 2,
+	assert_eq(s.member("seedant").current_hp, 41, "member HP")
+	assert_eq(s.member("seedant").item_id, "heartwood_charm", "member item")
+	assert_eq(int(s.member("seedant").growth.get("growth", 0)), 2,
 		"EVOLUTION's opaque growth survives (JSON numbers are EVOLUTION's to coerce)")
 	assert_not_null(s.member("petalfang#2"), "the RosterLedger-style uid survives")
 	assert_eq(s.item_count("sagebloom_poultice"), 1, "bag")

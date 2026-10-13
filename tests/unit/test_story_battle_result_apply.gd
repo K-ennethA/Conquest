@@ -25,11 +25,11 @@ func test_victory_applies_hp_rewards_and_trainer_flag() -> void:
 	var s := _state()
 	var res := BattleResult.make("trainer.mossway.bram", BattleResult.OUTCOME_VICTORY)
 	res.party_after = [
-		{"member_id": "vineweave", "current_hp": 20, "wounded": false},
+		{"member_id": "seedant", "current_hp": 20, "wounded": false},
 		{"member_id": "blightcap", "current_hp": 0, "wounded": true},
 	]
 	var out: Dictionary = StoryResultApplier.apply(s, _request(), res, null)
-	assert_eq(s.member("vineweave").current_hp, 20, "HP carries")
+	assert_eq(s.member("seedant").current_hp, 20, "HP carries")
 	assert_true(s.member("blightcap").wounded, "a KO'd member is wounded")
 	assert_eq(s.gold, 120, "reward gold")
 	assert_eq(s.item_count("sagebloom_poultice"), 1, "reward item into the story bag")
@@ -42,18 +42,18 @@ func test_victory_applies_hp_rewards_and_trainer_flag() -> void:
 func test_full_hp_stores_the_sentinel() -> void:
 	var s := _state()
 	var res := BattleResult.make("x", BattleResult.OUTCOME_VICTORY)
-	res.party_after = [{"member_id": "vineweave", "current_hp": 9999, "wounded": false}]
+	res.party_after = [{"member_id": "seedant", "current_hp": 9999, "wounded": false}]
 	StoryResultApplier.apply(s, _request(), res, null)
-	assert_eq(s.member("vineweave").current_hp, StoryPartyMember.HP_FULL, "max HP is stored as HP_FULL")
+	assert_eq(s.member("seedant").current_hp, StoryPartyMember.HP_FULL, "max HP is stored as HP_FULL")
 
 
 func test_whiteout_heals_and_reports() -> void:
 	var s := _state()
 	var res := BattleResult.make("x", BattleResult.OUTCOME_DEFEAT)
-	res.party_after = [{"member_id": "vineweave", "current_hp": 0, "wounded": true}]
+	res.party_after = [{"member_id": "seedant", "current_hp": 0, "wounded": true}]
 	var out: Dictionary = StoryResultApplier.apply(s, _request(), res, null)
 	assert_true(bool(out["whiteout"]), "a WHITEOUT defeat whites out")
-	assert_false(s.member("vineweave").wounded, "the party is healed")
+	assert_false(s.member("seedant").wounded, "the party is healed")
 	assert_eq(s.gold, 0, "no reward on a loss")
 	assert_false(s.has_flag("trainer.mossway.bram.defeated"), "the trainer stays undefeated")
 
@@ -61,15 +61,15 @@ func test_whiteout_heals_and_reports() -> void:
 func test_continue_policy_keeps_wounds_and_flee_changes_only_hp() -> void:
 	var s := _state()
 	var res := BattleResult.make("x", BattleResult.OUTCOME_DEFEAT)
-	res.party_after = [{"member_id": "vineweave", "current_hp": 0, "wounded": true}]
+	res.party_after = [{"member_id": "seedant", "current_hp": 0, "wounded": true}]
 	var out: Dictionary = StoryResultApplier.apply(s, _request(BattleRequest.SOURCE_SCRIPT, "continue"), res, null)
 	assert_false(bool(out["whiteout"]), "CONTINUE never whites out")
-	assert_true(s.member("vineweave").wounded, "the wound stays until a Wayshrine")
+	assert_true(s.member("seedant").wounded, "the wound stays until a Wayshrine")
 	var s2 := _state()
 	var fled := BattleResult.make("x", BattleResult.OUTCOME_FLED)
-	fled.party_after = [{"member_id": "vineweave", "current_hp": 30, "wounded": false}]
+	fled.party_after = [{"member_id": "seedant", "current_hp": 30, "wounded": false}]
 	StoryResultApplier.apply(s2, _request(BattleRequest.SOURCE_WILD), fled, null)
-	assert_eq(s2.member("vineweave").current_hp, 30, "a flee keeps the damage")
+	assert_eq(s2.member("seedant").current_hp, 30, "a flee keeps the damage")
 	assert_eq(s2.gold, 0, "and pays nothing")
 
 
@@ -86,7 +86,7 @@ func test_duel_stub_result_contract() -> void:
 	r.kind = BattleRequest.KIND_DUEL
 	r.encounter_id = "mossway.grass.petalfang"
 	r.seed = 77
-	r.party = [{"member_id": "vineweave", "character_id": "vineweave", "current_hp": -1},
+	r.party = [{"member_id": "seedant", "character_id": "vineweave", "current_hp": -1},
 		{"member_id": "blightcap", "character_id": "blightcap", "current_hp": 30}]
 	r.opponent = {"team": [{"character_id": "petalfang"}]}
 	r.rules = {"can_befriend": true}

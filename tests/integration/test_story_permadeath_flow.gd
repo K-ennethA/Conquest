@@ -245,13 +245,13 @@ func test_classic_tactical_fall_shows_in_party_returns_the_item_and_sits_out_nex
 	var s := _journey(StoryState.TIER_CLASSIC)
 	assert_eq(s.tier, StoryState.TIER_CLASSIC, "a Classic journey")
 	s.set_location("mossway", Vector3i(19, 6, 0), "north")
-	s.member("vineweave").item_id = "heartwood_charm"
+	s.member("seedant").item_id = "heartwood_charm"
 	assert_true(bool(StoryController.begin_battle(_bram_request(), false)["success"]), "Bram's battle stages")
 	var up: bool = await _boot_battle(3)
 	assert_true(up, "both members on the board")
 	if not up:
 		return
-	_unit_of("vineweave").take_damage(99999)
+	_unit_of("seedant").take_damage(99999)
 	await _frames(2)
 	assert_true(_resolved.is_empty(), "one member down: the battle goes on")
 	for u in CombatServices.board().all_units():
@@ -264,8 +264,8 @@ func test_classic_tactical_fall_shows_in_party_returns_the_item_and_sits_out_nex
 	var buttons: Array[Button] = screen.mode_action_buttons()
 	assert_eq(buttons[0].text, "Continue Journey", "an ordinary win: Continue Journey")
 	buttons[0].pressed.emit()
-	assert_null(s.member("vineweave"), "Vineweave fell: out of the party")
-	var f: StoryPartyMember = s.fallen_member("vineweave")
+	assert_null(s.member("seedant"), "Vineweave fell: out of the party")
+	var f: StoryPartyMember = s.fallen_member("seedant")
 	assert_not_null(f, "kept as a fallen record")
 	assert_eq(s.item_count("heartwood_charm"), 1, "its charm is back in the bag")
 	assert_eq(String(f.fallen_info["foe"]), "Bram", "fell against Bram")
@@ -280,11 +280,11 @@ func test_classic_tactical_fall_shows_in_party_returns_the_item_and_sits_out_nex
 	jm.show_party()
 	await _frames(1)
 	assert_not_null(jm.find_child("FallenHeading", true, false), "a Fallen section")
-	var card := jm.find_child("Fallen_vineweave", true, false)
+	var card := jm.find_child("Fallen_seedant", true, false)
 	assert_not_null(card, "Vineweave's fallen card")
 	var where := card.find_child("FellWhere", true, false) as Label if card != null else null
 	assert_true(where != null and where.text.contains("Bram"), "saying where / whom (%s)" % (where.text if where != null else ""))
-	assert_null(jm.member_card("vineweave"), "no living card for it")
+	assert_null(jm.member_card("seedant"), "no living card for it")
 	jm.close()
 
 	# The next battle leaves it out.
@@ -302,11 +302,11 @@ func test_casual_wayshrine_revives_the_knocked_out_for_gold() -> void:
 	var s := _journey(StoryState.TIER_CASUAL)
 	s.gold = 100
 	s.member("blightcap").wounded = true
-	s.member("vineweave").current_hp = 5
+	s.member("seedant").current_hp = 5
 	var ow := await _boot_overworld("oakvale", Vector3i(10, 10, 0), "north")
 	assert_true(ow.interact(), "touch the Wayshrine")
 	await _drain(ow, 1)
-	assert_eq(s.member("vineweave").current_hp, StoryPartyMember.HP_FULL, "the living rest for free")
+	assert_eq(s.member("seedant").current_hp, StoryPartyMember.HP_FULL, "the living rest for free")
 	assert_true(s.member("blightcap").wounded, "Not now: the knocked-out stay down")
 	assert_eq(s.gold, 100, "and nothing is charged")
 	assert_true(ow.interact(), "touch it again")
@@ -350,7 +350,7 @@ func test_the_shipped_spar_never_marks_anyone_fallen() -> void:
 	var br: BattleResult = StoryController.last_result()
 	assert_true(br.spar, "reported as a spar")
 	assert_false(br.is_game_over(), "never a game over")
-	var lead: StoryPartyMember = s.member("vineweave")
+	var lead: StoryPartyMember = s.member("seedant")
 	assert_not_null(lead, "nobody fell -- even in Classic")
 	assert_eq(s.fallen.size(), 0, "no fallen at all")
 	assert_false(lead.wounded, "the knocked-out partner is back up")
@@ -376,15 +376,15 @@ func test_a_tactical_spar_shows_friendly_spar_on_the_banner() -> void:
 	assert_true(banner.is_spar_shown(), "tagged Friendly spar")
 	var tag := banner.find_child(ObjectiveBanner.SPAR_NAME, true, false) as Control
 	assert_true(tag != null and tag.visible, "the green tag is drawn")
-	_unit_of("vineweave").take_damage(99999)
+	_unit_of("seedant").take_damage(99999)
 	for u in CombatServices.board().all_units():
 		if not _player_side(u):
 			u.take_damage(99999)
 	assert_true(await _until(func() -> bool: return _resolved.size() > 0), "resolves")
 	await _frames(1)
 	_end_screen().mode_action_buttons()[0].pressed.emit()
-	assert_not_null(s.member("vineweave"), "a spar KO never falls")
-	assert_eq(s.member("vineweave").current_hp, 1, "it gets up at 1 HP")
+	assert_not_null(s.member("seedant"), "a spar KO never falls")
+	assert_eq(s.member("seedant").current_hp, 1, "it gets up at 1 HP")
 
 
 # =====================================================================================
@@ -497,7 +497,7 @@ func test_a_stub_hero_fainting_in_a_duel_opens_the_game_over_card() -> void:
 		"saying the hero fell (%s)" % card.message())
 	assert_eq(card.buttons().size(), 2, "Load Last Save / Return to Title")
 	assert_eq(card.buttons()[0].text, "Load Last Save", "load first")
-	assert_false(s.member("vineweave").wounded, "the loss was NOT applied")
+	assert_false(s.member("seedant").wounded, "the loss was NOT applied")
 	card.buttons()[1].pressed.emit()
 	await _frames(1)
 	assert_false(StoryController.has_session(), "back to the title: the session is closed")

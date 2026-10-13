@@ -4,14 +4,19 @@ extends GutTest
 ## ("tree_grunt", Growth 2 of 3) fights Bram's tactical battle -> the end screen shows the Growth
 ## Continue will award -> Continue awards it into the JOURNEY's member record (not the global
 ## roster) -> back on the overworld the Evolution screen is offered -> Evolve -> the member
-## BECOMES Oakheart (member id, item and proportional HP kept; the form is unlocked for open
-## modes) -> the next story battle fields Oakheart -> save / reload keeps form and growth.
+## BECOMES Mycothrall (member id, item and proportional HP kept; the form is unlocked for open
+## modes) -> the next story battle fields Mycothrall -> save / reload keeps form and growth.
+## The edge is the test-only Barkling -> Mycothrall one (Growth 3 + 2 wins,
+## tests/helpers/evolution_fixture.gd), installed before and dropped after each test.
 
 const WORLD_SCENE := preload("res://game/world/GameWorld.tscn")
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
 const TEMP_DIR := "user://test_story_evolution_wiring/"
 const TEMP_BATTLE_SAVE := "user://test_story_evolution_wiring_battle.json"
 const TEMP_ROSTER := "user://test_story_evolution_wiring_roster.json"
+const EvoFixture := preload("res://tests/helpers/evolution_fixture.gd")
+## The second party member: a unit in no evolution line.
+const OTHER := "blightcap"
 
 var _guard
 var _world: Node = null
@@ -45,6 +50,7 @@ func before_each() -> void:
 	StorySaveManager.set_save_dir(TEMP_DIR)
 	Guard.rm_rf(TEMP_DIR)
 	RosterLedger.reset()
+	EvoFixture.install()
 	StoryController.end_session()
 	StoryController.scene_changes_enabled = false
 	_resolved = []
@@ -73,6 +79,7 @@ func after_each() -> void:
 	GrowthTracker.begin_battle_log()
 	PortraitCache.reset()
 	RosterLedger.reset()
+	EvoFixture.uninstall()
 	_clear_globals()
 	_guard.restore()
 	await get_tree().process_frame
@@ -137,8 +144,8 @@ func _party_units() -> Array:
 	return out
 
 
-## A journey whose party is a Barkling one won battle short of Oakheart (Growth 2 of 3, 1 of the
-## 2 wins -- EVOLUTION.md §3.2a), plus Vineweave.
+## A journey whose party is a Barkling one won battle short of Mycothrall (Growth 2 of 3, 1 of the
+## 2 wins -- EVOLUTION.md §3.2a), plus a Blightcap (in no line).
 func _barkling_journey() -> StoryState:
 	StoryController.new_journey(1)
 	var s: StoryState = StoryController.state()
@@ -147,7 +154,7 @@ func _barkling_journey() -> StoryState:
 	bark.add_growth(2)
 	bark.add_feats({"wins": 1})
 	bark.item_id = "heartwood_charm"
-	s.add_member("vineweave")
+	s.add_member(OTHER)
 	s.set_location("mossway", Vector3i(19, 6, 0), "north")
 	return s
 
@@ -190,7 +197,7 @@ func test_growth_evolution_offer_and_the_evolved_form_fights_next() -> void:
 
 	screen.mode_action_buttons()[0].pressed.emit()
 	assert_eq(bark.growth_points(), 3, "Continue awarded the Growth into the journey's member record")
-	assert_eq(s.member("vineweave").growth_points(), 1, "every surviving fielded member earns")
+	assert_eq(s.member(OTHER).growth_points(), 1, "every surviving fielded member earns")
 	_teardown_world()
 	var bark_max_before: int = bark.max_hp()  # its level's max (55 at level 1; the win paid XP)
 	bark.current_hp = 27  # about half
@@ -207,15 +214,15 @@ func test_growth_evolution_offer_and_the_evolved_form_fights_next() -> void:
 	evo.dismiss()
 	evo.dismiss()
 	await get_tree().process_frame
-	assert_eq(bark.character_id, "oakheart", "the party member BECAME Oakheart")
+	assert_eq(bark.character_id, String(EvoFixture.TO_ID), "the party member BECAME Mycothrall")
 	assert_eq(bark.member_id, "tree_grunt", "same individual (member id kept)")
 	assert_eq(bark.item_id, "heartwood_charm", "its item stays on")
 	assert_eq(bark.current_hp, roundi(27.0 / float(bark_max_before) * float(bark.max_hp())),
-		"HP kept by ratio (Barkling max -> Oakheart max at the same level)")
+		"HP kept by ratio (Barkling max -> Mycothrall max at the same level)")
 	assert_eq(bark.evolution_history().size(), 1, "the evolution is in its history")
-	assert_true(RosterLedger.is_form_unlocked("oakheart"), "Oakheart is unlocked for the open modes too")
+	assert_true(RosterLedger.is_form_unlocked(String(EvoFixture.TO_ID)), "Mycothrall is unlocked for the open modes too")
 	assert_eq(RosterLedger.form_of("tree_grunt"), &"tree_grunt", "the open-mode Barkling is untouched")
-	assert_eq(String(StorySaveManager.peek(1)["party"][0]["character_id"]), "oakheart", "and the journey saved it")
+	assert_eq(String(StorySaveManager.peek(1)["party"][0]["character_id"]), String(EvoFixture.TO_ID), "and the journey saved it")
 
 	# The next story battle fields the evolved form. (The charm comes off first: its HP bonus
 	# would blur the carried-HP check, as in test_story_tactical_round_trip.)
@@ -224,8 +231,8 @@ func test_growth_evolution_offer_and_the_evolved_form_fights_next() -> void:
 	_resolved = []
 	_clear_globals()
 	assert_true(bool(StoryController.begin_battle(_bram_request(), false)["success"]), "the next battle stages")
-	assert_eq(StoryController.active_request().party[0]["character_id"], "oakheart", "the request fields Oakheart")
-	assert_true(GameSettings.selected_squad.has("oakheart"), "the squad is staged with Oakheart")
+	assert_eq(StoryController.active_request().party[0]["character_id"], String(EvoFixture.TO_ID), "the request fields Mycothrall")
+	assert_true(GameSettings.selected_squad.has(String(EvoFixture.TO_ID)), "the squad is staged with Mycothrall")
 	_boot_world()
 	var up: bool = await _await_until(func() -> bool:
 		return TurnSystemManager.has_active_turn_system() and _party_units().size() == 2)
@@ -236,9 +243,9 @@ func test_growth_evolution_offer_and_the_evolved_form_fights_next() -> void:
 			fielded = u
 	assert_not_null(fielded, "the member is on the board")
 	if fielded != null:
-		assert_eq(fielded.character_resource.character_id, &"oakheart", "as Oakheart")
-		# Carried HP, not a fresh full bar (Oakheart's Nature's Blessing may already have ticked
-		# a heal on the opening turn, so the floor is the carried value).
+		assert_eq(fielded.character_resource.character_id, EvoFixture.TO_ID, "as Mycothrall")
+		# Carried HP, not a fresh full bar (an opening-turn heal may already have ticked, so the
+		# floor is the carried value).
 		assert_between(int(fielded.current_health), bark.current_hp, fielded.max_health - 1,
 			"with its carried HP")
 
@@ -255,7 +262,7 @@ func test_not_now_leaves_the_member_and_offers_again_later() -> void:
 	(_screens[0] as EvolutionScreen).decline()
 	await get_tree().process_frame
 	assert_eq(bark.character_id, "tree_grunt", "Not now changes nothing")
-	assert_false(RosterLedger.is_form_unlocked("oakheart"), "and unlocks nothing")
+	assert_false(RosterLedger.is_form_unlocked(String(EvoFixture.TO_ID)), "and unlocks nothing")
 	assert_eq(StoryGrowth.pending(s), ["tree_grunt"], "the offer stays open")
 
 
@@ -264,14 +271,14 @@ func test_save_and_reload_keeps_forms_and_growth() -> void:
 	var bark: StoryPartyMember = s.member("tree_grunt")
 	bark.add_growth(1)
 	bark.add_feats({"wins": 1})
-	var r: Dictionary = StoryGrowth.evolve(s, "tree_grunt", EvolutionLibrary.get_edge(&"tree_grunt__oakheart"))
+	var r: Dictionary = StoryGrowth.evolve(s, "tree_grunt", EvolutionLibrary.get_edge(EvoFixture.EDGE_ID))
 	assert_true(bool(r["success"]), "evolves")
 	assert_true(bool(StoryController.save_game()["success"]), "saves")
 	var loaded: Dictionary = StorySaveManager.load_state(1)
 	assert_true(bool(loaded["success"]), "reloads")
 	var back: StoryPartyMember = (loaded["state"] as StoryState).member("tree_grunt")
 	assert_not_null(back, "the member survives the round trip")
-	assert_eq(back.character_id, "oakheart", "as its evolved form")
+	assert_eq(back.character_id, String(EvoFixture.TO_ID), "as its evolved form")
 	assert_eq(back.line, "tree_grunt", "of its line")
 	assert_eq(back.growth_points(), 3, "with its Growth")
 	assert_eq(back.evolution_history().size(), 1, "and its history")
@@ -282,7 +289,7 @@ func test_a_scripted_evolve_member_command_evolves_past_the_triggers() -> void:
 	var s := _barkling_journey()
 	var cmd := EvolveMemberCommand.new()
 	cmd.member = "tree_grunt"
-	cmd.edge_id = &"tree_grunt__oakheart"
+	cmd.edge_id = EvoFixture.EDGE_ID
 	var issues: Array[String] = []
 	cmd.validate(issues)
 	assert_eq(issues.size(), 0, "a valid command (%s)" % [issues])
@@ -295,4 +302,4 @@ func test_a_scripted_evolve_member_command_evolves_past_the_triggers() -> void:
 	(_screens[0] as EvolutionScreen).dismiss()
 	(_screens[0] as EvolutionScreen).dismiss()
 	assert_true(await _await_until(func() -> bool: return not StoryController.is_script_running(), 60), "the script finishes")
-	assert_eq(s.member("tree_grunt").character_id, "oakheart", "the member evolved past its Growth trigger")
+	assert_eq(s.member("tree_grunt").character_id, String(EvoFixture.TO_ID), "the member evolved past its Growth trigger")

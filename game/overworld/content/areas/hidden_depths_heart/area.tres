@@ -1,0 +1,140 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="1_3o1fe"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartBattleCommand.gd" id="2_wha35"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="3_m77bf"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/IfCommand.gd" id="4_e4b0a"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="5_fakvr"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SayCommand.gd" id="6_oagj8"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/SaveGameCommand.gd" id="7_hl4du"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="8_o15rc"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="9_lbu81"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="10_fm10u"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="11_bp5vo"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="12_bq8es"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/hidden_depths_heart/terrain.tres" id="13_ur4q1"]
+
+[sub_resource type="Resource" id="Resource_hx8wu"]
+script = ExtResource("1_3o1fe")
+prop = "crystal"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"hd3_crystal_11_5"
+cell = Vector3i(11, 5, 0)
+tint = Color(0.55, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Resource_iwidh"]
+script = ExtResource("1_3o1fe")
+prop = "crystal"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"hd3_crystal_11_6"
+cell = Vector3i(11, 6, 0)
+tint = Color(0.55, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Resource_b6hkr"]
+script = ExtResource("1_3o1fe")
+prop = "crystal"
+footprint = Vector2i(1, 1)
+glow = 3.0
+id = &"hd3_crystal_10_9"
+cell = Vector3i(10, 9, 0)
+tint = Color(0.55, 0.9, 1, 1)
+
+[sub_resource type="Resource" id="Resource_tkyka"]
+script = ExtResource("3_m77bf")
+encounter_id = "hidden_depths.boss"
+map_path = "res://game/overworld/content/battles/ow_hidden_depths.tres"
+squad_size = 4
+opponent_name = "Duskmaw"
+opponent_team = Array[Dictionary]([{
+"character_id": "monster",
+"strength": 1.0
+}, {
+"character_id": "gem_knight",
+"strength": 1.0
+}, {
+"character_id": "gem_knight",
+"strength": 1.0
+}])
+reward_flags = Array[String](["hidden_depths.boss_beaten", "postgame.hidden_depths_awakened"])
+defeat_policy = 2
+clash_intro = true
+enemy_level = 38
+boss_battle = true
+
+[sub_resource type="Resource" id="Resource_lexnb"]
+script = ExtResource("2_wha35")
+spec = SubResource("Resource_tkyka")
+
+[sub_resource type="Resource" id="Resource_esrid"]
+script = ExtResource("5_fakvr")
+text = "The depths shudder. Far away, the ground answers."
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_5cvqx"]
+script = ExtResource("6_oagj8")
+beats = Array[Resource]([SubResource("Resource_esrid")])
+
+[sub_resource type="Resource" id="Resource_j26b5"]
+script = ExtResource("7_hl4du")
+
+[sub_resource type="Resource" id="Resource_1gv2e"]
+script = ExtResource("4_e4b0a")
+condition = "outcome() == \"victory\""
+then_commands = Array[Resource]([SubResource("Resource_5cvqx"), SubResource("Resource_j26b5")])
+
+[sub_resource type="Resource" id="Resource_s5dgy"]
+script = ExtResource("8_o15rc")
+label = "Face it"
+commands = Array[Resource]([SubResource("Resource_lexnb"), SubResource("Resource_1gv2e")])
+
+[sub_resource type="Resource" id="Resource_x37go"]
+script = ExtResource("8_o15rc")
+label = "Not yet"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_arvl5"]
+script = ExtResource("5_fakvr")
+text = "Something vast sleeps at the heart of the ruins. As you come near, it stirs. Face it?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_1kb0k"]
+script = ExtResource("9_lbu81")
+prompt = SubResource("Resource_arvl5")
+options = Array[Resource]([SubResource("Resource_s5dgy"), SubResource("Resource_x37go")])
+
+[sub_resource type="Resource" id="Resource_pkx3o"]
+script = ExtResource("10_fm10u")
+speaker_name = "Duskmaw"
+id = &"depths_boss"
+cell = Vector3i(8, 2, 0)
+display_name = "Duskmaw"
+visual_character = &"monster"
+visible_if = "not has(\"hidden_depths.boss_beaten\")"
+on_interact = Array[Resource]([SubResource("Resource_1kb0k")])
+
+[sub_resource type="Resource" id="Resource_05g4d"]
+script = ExtResource("11_bp5vo")
+area_rect = Rect2i(8, 13, 2, 1)
+target_area = &"hidden_depths_3"
+target_entry = &"north"
+id = &"south_exit"
+blocking = false
+
+[resource]
+script = ExtResource("12_bq8es")
+area_id = &"hidden_depths_heart"
+display_name = "Heart of the Depths"
+terrain = ExtResource("13_ur4q1")
+kind = 3
+region_id = &"northern_mountains"
+world_map_pos = Vector2(0.85, 0.137)
+entry_points = {
+"south": {
+"cell": [8, 12, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_hx8wu"), SubResource("Resource_iwidh"), SubResource("Resource_b6hkr"), SubResource("Resource_pkx3o"), SubResource("Resource_05g4d")])
+level_band = Vector2i(25, 35)

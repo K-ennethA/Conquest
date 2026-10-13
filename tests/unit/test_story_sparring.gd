@@ -39,13 +39,13 @@ func _spar_request(id: String = PARTNER) -> BattleRequest:
 	r.encounter_id = id
 	r.source = BattleRequest.SOURCE_SCRIPT
 	r.rules = {"spar": true, "defeat_policy": "continue"}
-	r.party = [{"member_id": "vineweave", "character_id": "vineweave"}]
+	r.party = [{"member_id": "seedant", "character_id": "vineweave"}]
 	return r
 
 
 func _result(outcome: String, id: String = PARTNER) -> BattleResult:
 	var r := BattleResult.make(id, outcome)
-	r.party_after = [{"member_id": "vineweave", "current_hp": 20, "wounded": false}]
+	r.party_after = [{"member_id": "seedant", "current_hp": 20, "wounded": false}]
 	return r
 
 

@@ -1,0 +1,60 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/badlands/mesa_rock.tres" id="2_res"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_band"]
+size = Vector3(1.9, 0.6, 1.9)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slab"]
+albedo_color = Color(0.55, 0.28, 0.19, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_band_a"]
+albedo_color = Color(0.62, 0.32, 0.21, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_band_b"]
+albedo_color = Color(0.72, 0.42, 0.27, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_band_c"]
+albedo_color = Color(0.56, 0.27, 0.18, 1)
+roughness = 0.95
+
+[node name="MesaRockTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = SubResource("StandardMaterial3D_slab")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="RockVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="BandLow" type="MeshInstance3D" parent="RockVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+mesh = SubResource("BoxMesh_band")
+material_override = SubResource("StandardMaterial3D_band_a")
+
+[node name="BandMid" type="MeshInstance3D" parent="RockVisual"]
+transform = Transform3D(0.94, 0, 0, 0, 1, 0, 0, 0, 0.92, 0.03, 0.9, -0.02)
+mesh = SubResource("BoxMesh_band")
+material_override = SubResource("StandardMaterial3D_band_b")
+
+[node name="BandTop" type="MeshInstance3D" parent="RockVisual"]
+transform = Transform3D(0.86, 0, 0, 0, 0.8, 0, 0, 0, 0.88, -0.04, 1.44, 0.03)
+mesh = SubResource("BoxMesh_band")
+material_override = SubResource("StandardMaterial3D_band_c")

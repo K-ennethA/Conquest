@@ -76,7 +76,7 @@ func _request(kind: String = BattleRequest.KIND_TACTICAL, policy: String = "whit
 	r.rules = {"defeat_policy": policy}
 	r.opponent = {"name": "Bram", "team": []}
 	r.backdrop = {"area_id": "mossway"}
-	r.party = [{"member_id": "vineweave", "character_id": "vineweave"},
+	r.party = [{"member_id": "seedant", "character_id": "vineweave"},
 		{"member_id": "blightcap", "character_id": "blightcap"}]
 	return r
 
@@ -115,17 +115,17 @@ func test_a_tier_only_ever_moves_down() -> void:
 
 func test_classic_tactical_knockouts_fall_with_their_record_and_item() -> void:
 	var s := _state()
-	var vine: StoryPartyMember = s.member("vineweave")
+	var vine: StoryPartyMember = s.member("seedant")
 	vine.item_id = "heartwood_charm"
 	vine.add_growth(4)
 	vine.nickname = "Ivy"
 	var res := _result(BattleResult.OUTCOME_VICTORY, [
-		{"member_id": "vineweave", "current_hp": 0, "wounded": true, "fought": true},
+		{"member_id": "seedant", "current_hp": 0, "wounded": true, "fought": true},
 		{"member_id": "blightcap", "current_hp": 20, "wounded": false, "fought": true}])
 	var out: Dictionary = StoryResultApplier.apply(s, _request(), res, _ruleset())
-	assert_eq(out["fallen"], ["vineweave"], "the knocked-out member fell")
-	assert_null(s.member("vineweave"), "it left the party")
-	var f: StoryPartyMember = s.fallen_member("vineweave")
+	assert_eq(out["fallen"], ["seedant"], "the knocked-out member fell")
+	assert_null(s.member("seedant"), "it left the party")
+	var f: StoryPartyMember = s.fallen_member("seedant")
 	assert_not_null(f, "kept as a fallen record")
 	if f == null:
 		return
@@ -147,10 +147,10 @@ func test_classic_tactical_knockouts_fall_with_their_record_and_item() -> void:
 func test_classic_duel_lead_that_fainted_falls_and_the_bench_does_not() -> void:
 	var s := _state()
 	var res := _result(BattleResult.OUTCOME_DEFEAT, [
-		{"member_id": "vineweave", "current_hp": 0, "wounded": true, "fought": true},
+		{"member_id": "seedant", "current_hp": 0, "wounded": true, "fought": true},
 		{"member_id": "blightcap", "current_hp": -1, "wounded": false, "fought": false}])
 	var out: Dictionary = StoryResultApplier.apply(s, _request(BattleRequest.KIND_DUEL), res, _ruleset())
-	assert_eq(out["fallen"], ["vineweave"], "the lead that fainted fell")
+	assert_eq(out["fallen"], ["seedant"], "the lead that fainted fell")
 	assert_not_null(s.member("blightcap"), "the bench (never fought) is untouched")
 	assert_true(bool(out["whiteout"]), "the loss still whites out")
 	assert_false(s.member("blightcap").wounded, "and the living are rested")
@@ -158,12 +158,12 @@ func test_classic_duel_lead_that_fainted_falls_and_the_bench_does_not() -> void:
 
 func test_the_fallen_are_never_healed_revived_or_counted_against_the_cap() -> void:
 	var s := _state()
-	s.mark_fallen("vineweave", {"kind": "tactical"})
+	s.mark_fallen("seedant", {"kind": "tactical"})
 	s.heal_party()
-	assert_true(s.fallen_member("vineweave").is_fallen(), "a rest does not bring the fallen back")
-	assert_eq(s.fallen_member("vineweave").current_hp, 0, "nor heal it")
+	assert_true(s.fallen_member("seedant").is_fallen(), "a rest does not bring the fallen back")
+	assert_eq(s.fallen_member("seedant").current_hp, 0, "nor heal it")
 	var again: StoryPartyMember = s.add_member("vineweave")
-	assert_eq(again.member_id, "vineweave#2", "a new recruit never inherits a fallen member's uid")
+	assert_eq(again.member_id, "seedant#2", "a new recruit never inherits a fallen member's uid")
 	for i in range(4):
 		s.add_member("petalfang")
 	assert_eq(s.party.size(), 6, "the fallen do not take a party slot")
@@ -174,11 +174,11 @@ func test_a_spar_never_marks_anyone_fallen() -> void:
 	var req := _request(BattleRequest.KIND_DUEL, "continue")
 	req.rules["spar"] = true
 	var res := _result(BattleResult.OUTCOME_DEFEAT, [
-		{"member_id": "vineweave", "current_hp": 0, "wounded": true, "fought": true}])
+		{"member_id": "seedant", "current_hp": 0, "wounded": true, "fought": true}])
 	var out: Dictionary = StoryResultApplier.apply(s, req, res, _ruleset())
 	assert_eq((out["fallen"] as Array).size(), 0, "nobody falls in a spar, even in Classic")
-	assert_eq(out["spar_recovered"], ["vineweave"], "its knocked-out get back up")
-	var m: StoryPartyMember = s.member("vineweave")
+	assert_eq(out["spar_recovered"], ["seedant"], "its knocked-out get back up")
+	var m: StoryPartyMember = s.member("seedant")
 	assert_false(m.wounded, "not knocked out")
 	assert_eq(m.current_hp, 1, "at 1 HP")
 	# The knob off: a spar KO is an ordinary knock-out (still never a fall).
@@ -187,31 +187,31 @@ func test_a_spar_never_marks_anyone_fallen() -> void:
 	rs.spar_ko_recovers = false
 	var out2: Dictionary = StoryResultApplier.apply(s2, req, res, rs)
 	assert_eq((out2["fallen"] as Array).size(), 0, "still nobody falls")
-	assert_true(s2.member("vineweave").wounded, "the KO stays down with the knob off")
+	assert_true(s2.member("seedant").wounded, "the KO stays down with the knob off")
 
 
 func test_casual_knockouts_stay_down_and_never_fall() -> void:
 	var s := _state(StoryState.TIER_CASUAL)
 	var res := _result(BattleResult.OUTCOME_VICTORY, [
-		{"member_id": "vineweave", "current_hp": 0, "wounded": true, "fought": true},
+		{"member_id": "seedant", "current_hp": 0, "wounded": true, "fought": true},
 		{"member_id": "blightcap", "current_hp": 20, "wounded": false, "fought": true}])
 	var out: Dictionary = StoryResultApplier.apply(s, _request(), res, _ruleset())
 	assert_eq((out["fallen"] as Array).size(), 0, "Casual: nobody falls")
-	assert_true(s.member("vineweave").wounded, "knocked out until revived")
+	assert_true(s.member("seedant").wounded, "knocked out until revived")
 	assert_eq(s.knocked_out_members().size(), 1, "one to revive")
 
 
 func test_a_whiteout_revives_the_knocked_out_unless_the_knob_says_no() -> void:
 	var s := _state(StoryState.TIER_CASUAL)
 	var res := _result(BattleResult.OUTCOME_DEFEAT, [
-		{"member_id": "vineweave", "current_hp": 0, "wounded": true, "fought": true}])
+		{"member_id": "seedant", "current_hp": 0, "wounded": true, "fought": true}])
 	StoryResultApplier.apply(s, _request(), res, _ruleset())
-	assert_false(s.member("vineweave").wounded, "a whiteout wakes everyone at the Wayshrine")
+	assert_false(s.member("seedant").wounded, "a whiteout wakes everyone at the Wayshrine")
 	var s2 := _state(StoryState.TIER_CASUAL)
 	var rs := _ruleset()
 	rs.whiteout_revives = false
 	StoryResultApplier.apply(s2, _request(), res, rs)
-	assert_true(s2.member("vineweave").wounded, "whiteout_revives off: still knocked out")
+	assert_true(s2.member("seedant").wounded, "whiteout_revives off: still knocked out")
 
 
 # --- Casual: the Wayshrine's gold revive -----------------------------------------------------
@@ -219,7 +219,7 @@ func test_a_whiteout_revives_the_knocked_out_unless_the_knob_says_no() -> void:
 func test_the_revive_quote_charges_casual_per_member() -> void:
 	var s := _state(StoryState.TIER_CASUAL)
 	s.gold = 120
-	s.member("vineweave").wounded = true
+	s.member("seedant").wounded = true
 	s.member("blightcap").wounded = true
 	var q: Dictionary = StoryPermadeath.revive_quote(s, _ruleset())
 	assert_eq(int(q["count"]), 2, "two knocked out")
@@ -238,23 +238,23 @@ func test_the_revive_quote_charges_casual_per_member() -> void:
 func test_a_casual_rest_heals_the_living_only_and_the_shrine_revives_for_gold() -> void:
 	var s := _state(StoryState.TIER_CASUAL)
 	s.gold = 100
-	s.member("vineweave").wounded = true
+	s.member("seedant").wounded = true
 	s.member("blightcap").current_hp = 5
 	var session := FakeSession.new(_ruleset())
 	var host := ChoosingHost.new()
 	var ctx := ScriptContext.new(s, host, session, "oakvale")
 	await StoryScriptRunner.run_list([HealPartyCommand.new()], ctx)
 	assert_eq(s.member("blightcap").current_hp, StoryPartyMember.HP_FULL, "the living rest for free")
-	assert_true(s.member("vineweave").wounded, "the knocked-out wait for the fee")
+	assert_true(s.member("seedant").wounded, "the knocked-out wait for the fee")
 	host.pick = 1
 	await StoryScriptRunner.run_list([ReviveOfferCommand.new()], ctx)
 	assert_eq(host.choices, 1, "the shrine asks")
-	assert_true(s.member("vineweave").wounded, "Not now: still down")
+	assert_true(s.member("seedant").wounded, "Not now: still down")
 	assert_eq(s.gold, 100, "and no gold taken")
 	host.pick = 0
 	await StoryScriptRunner.run_list([ReviveOfferCommand.new()], ctx)
-	assert_false(s.member("vineweave").wounded, "paid: revived")
-	assert_eq(s.member("vineweave").current_hp, StoryPartyMember.HP_FULL, "to full")
+	assert_false(s.member("seedant").wounded, "paid: revived")
+	assert_eq(s.member("seedant").current_hp, StoryPartyMember.HP_FULL, "to full")
 	assert_eq(s.gold, 50, "for 50 gold")
 	assert_eq(session.saves, 1, "and the journey saved")
 	assert_eq(int(ctx.vars["revived"]), 1, "one got up")
@@ -262,10 +262,10 @@ func test_a_casual_rest_heals_the_living_only_and_the_shrine_revives_for_gold() 
 
 func test_a_classic_rest_revives_spar_knockouts_for_free() -> void:
 	var s := _state(StoryState.TIER_CLASSIC)
-	s.member("vineweave").wounded = true
+	s.member("seedant").wounded = true
 	var ctx := ScriptContext.new(s, ChoosingHost.new(), FakeSession.new(_ruleset()), "oakvale")
 	await StoryScriptRunner.run_list([HealPartyCommand.new()], ctx)
-	assert_false(s.member("vineweave").wounded, "no fee in Classic")
+	assert_false(s.member("seedant").wounded, "no fee in Classic")
 
 
 # --- Revive items refuse the fallen ----------------------------------------------------------
@@ -281,10 +281,10 @@ func test_revive_items_work_in_both_tiers_but_never_on_the_fallen() -> void:
 	assert_true(bool(s.use_consumable("dawnpetal_draught", "blightcap")["ok"]), "Casual: a revive raises the knocked-out")
 	var c := _state(StoryState.TIER_CLASSIC)
 	c.add_item("dawnpetal_draught", 1)
-	c.mark_fallen("vineweave", {"kind": "duel"})
-	var f: StoryPartyMember = c.fallen_member("vineweave")
+	c.mark_fallen("seedant", {"kind": "duel"})
+	var f: StoryPartyMember = c.fallen_member("seedant")
 	assert_eq(revive.consumable.check_member(f)["reason"], "fallen", "check_member refuses a fallen member")
-	assert_eq(c.use_consumable("dawnpetal_draught", "vineweave")["reason"], "fallen", "the bag refuses it too")
+	assert_eq(c.use_consumable("dawnpetal_draught", "seedant")["reason"], "fallen", "the bag refuses it too")
 	assert_eq(c.item_count("dawnpetal_draught"), 1, "and nothing is spent")
 	assert_true(ConsumableEffect.reason_text("fallen", "Vineweave").contains("fallen"), "with words for it")
 	var tonic: ItemResource = ItemLibrary.get_item("mossleaf_tonic")
@@ -295,25 +295,25 @@ func test_revive_items_work_in_both_tiers_but_never_on_the_fallen() -> void:
 
 func test_the_hero_falling_is_always_a_game_over() -> void:
 	var s := _state(StoryState.TIER_CASUAL)
-	s.member("vineweave").is_hero = true
+	s.member("seedant").is_hero = true
 	var req := _request(BattleRequest.KIND_DUEL)
-	req.party = StoryBattleBridge.party_snapshot([s.member("vineweave")])
-	assert_eq(req.hero_member_ids(), ["vineweave"], "the hero flag rides the party snapshot")
-	var rows: Array = [{"member_id": "vineweave", "current_hp": 0, "wounded": true, "fought": true}]
+	req.party = StoryBattleBridge.party_snapshot([s.member("seedant")])
+	assert_eq(req.hero_member_ids(), ["seedant"], "the hero flag rides the party snapshot")
+	var rows: Array = [{"member_id": "seedant", "current_hp": 0, "wounded": true, "fought": true}]
 	var res := _result(BattleResult.OUTCOME_DEFEAT, rows)
 	assert_eq(StoryPermadeath.game_over_reason(s, req, res, _ruleset()), StoryPermadeath.REASON_HERO, "the hero fell")
 	res.game_over_reason = StoryPermadeath.REASON_HERO
-	var hp_before: int = s.member("vineweave").current_hp
+	var hp_before: int = s.member("seedant").current_hp
 	var out: Dictionary = StoryResultApplier.apply(s, req, res, _ruleset())
 	assert_false(bool(out["whiteout"]), "a game over is never applied")
-	assert_eq(s.member("vineweave").current_hp, hp_before, "nothing changes")
+	assert_eq(s.member("seedant").current_hp, hp_before, "nothing changes")
 	var spar := _request(BattleRequest.KIND_DUEL)
 	spar.party = req.party
 	spar.rules["spar"] = true
 	assert_eq(StoryPermadeath.game_over_reason(s, spar, _result(BattleResult.OUTCOME_DEFEAT, rows), _ruleset()), "",
 		"a friendly spar only knocks the hero out")
 	var won := _result(BattleResult.OUTCOME_VICTORY, [
-		{"member_id": "vineweave", "current_hp": 30, "wounded": false, "fought": true}])
+		{"member_id": "seedant", "current_hp": 30, "wounded": false, "fought": true}])
 	assert_eq(StoryPermadeath.game_over_reason(s, req, won, _ruleset()), "", "a standing hero is no game over")
 	assert_true(StoryPermadeath.game_over_text(StoryPermadeath.REASON_HERO, "Wren").begins_with("Wren has fallen"),
 		"the card names the hero")
@@ -336,9 +336,9 @@ func test_a_classic_wipe_is_a_game_over_behind_its_knob() -> void:
 	s.tier = StoryState.TIER_CLASSIC
 	s.add_member("vineweave")
 	var req := _request(BattleRequest.KIND_DUEL)
-	req.party = [{"member_id": "vineweave", "character_id": "vineweave"}]
+	req.party = [{"member_id": "seedant", "character_id": "vineweave"}]
 	var res := _result(BattleResult.OUTCOME_DEFEAT, [
-		{"member_id": "vineweave", "current_hp": 0, "wounded": true, "fought": true}])
+		{"member_id": "seedant", "current_hp": 0, "wounded": true, "fought": true}])
 	assert_eq(StoryPermadeath.game_over_reason(s, req, res, _ruleset()), StoryPermadeath.REASON_WIPE,
 		"Classic: nobody would be left")
 	var rs := _ruleset()
@@ -353,7 +353,7 @@ func test_a_classic_wipe_is_a_game_over_behind_its_knob() -> void:
 func test_tier_and_fallen_round_trip_and_old_saves_load_casual() -> void:
 	var s := _state(StoryState.TIER_CLASSIC)
 	s.member("blightcap").item_id = "heartwood_charm"
-	s.member("vineweave").is_hero = true
+	s.member("seedant").is_hero = true
 	s.mark_fallen("blightcap", {"area_id": "mossway", "foe": "Bram", "kind": "tactical", "play_seconds": 65})
 	var data: Dictionary = JSON.parse_string(JSON.stringify(StorySnapshot.to_dict(s)))
 	var back: Dictionary = StorySnapshot.from_dict(data)
@@ -368,7 +368,7 @@ func test_tier_and_fallen_round_trip_and_old_saves_load_casual() -> void:
 		return
 	assert_eq(String(f.fallen_info["foe"]), "Bram", "with where / when")
 	assert_eq(int(f.fallen_info["play_seconds"]), 65, "the play time")
-	assert_true(t.member("vineweave").is_hero, "the hero flag round-trips")
+	assert_true(t.member("seedant").is_hero, "the hero flag round-trips")
 	assert_eq(t.item_count("heartwood_charm"), 1, "the returned item is in the saved bag")
 	# A version-2 save from before tiers existed: no "tier", no "fallen".
 	data.erase("tier")
@@ -395,7 +395,7 @@ func test_spar_and_protect_ride_the_spec_request_and_result() -> void:
 	var r: BattleRequest = spec.to_request(BattleRequest.SOURCE_SCRIPT, "x.spar")
 	assert_true(r.is_spar(), "the request is a spar")
 	assert_eq(r.protect_targets(), names, "and names who to protect")
-	r.party = [{"member_id": "vineweave", "character_id": "vineweave", "current_hp": -1}]
+	r.party = [{"member_id": "seedant", "character_id": "vineweave", "current_hp": -1}]
 	var back: BattleRequest = BattleRequest.from_dict(JSON.parse_string(JSON.stringify(r.to_dict())))
 	assert_true(back.is_spar(), "round-trips")
 	assert_eq(back.protect_targets(), names, "both")

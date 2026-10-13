@@ -338,7 +338,7 @@ func test_battle_request_opening_rule() -> void:
 func test_duel_request_carries_the_opening() -> void:
 	var e = Fix.entry("petalfang")
 	var br: BattleRequest = e.to_request("wild_test", "wild", BattleRequest.OPENING_AMBUSHED)
-	br.party = [{"member_id": "vineweave", "character_id": "vineweave", "current_hp": -1, "item_id": ""}]
+	br.party = [{"member_id": "seedant", "character_id": "vineweave", "current_hp": -1, "item_id": ""}]
 	var d: Dictionary = DuelRequest.from_battle_request(br.to_dict())
 	assert_true(bool(d["success"]), "the duel request builds")
 	var dr: DuelRequest = d["request"]

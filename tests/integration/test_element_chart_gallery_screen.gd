@@ -228,34 +228,34 @@ func test_the_headers_are_element_badges_drawn_wide_enough_to_read() -> void:
 
 	# THE ROW header gets the roomy cap and must read in full.
 	var row_head := grid.get_node_or_null(
-			ElementChartGallery.ROW_HEADER_PREFIX + "nature") as PanelContainer
-	assert_not_null(row_head, "the nature ROW is headed by an element badge, not a bare string")
+			ElementChartGallery.ROW_HEADER_PREFIX + "plant") as PanelContainer
+	assert_not_null(row_head, "the plant ROW is headed by an element badge, not a bare string")
 	if row_head != null:
 		assert_true(row_head.visible, "and it is on screen")
 		_assert_reads(row_head.get_node_or_null(ElementVisuals.BADGE_LABEL_NAME) as Label,
-				"the nature row header")
+				"the plant row header")
 		# The chip is a grove plate (OrnateStyleBox) now, not a StyleBoxFlat -- both
 		# expose border_color, which is the property this pins.
 		var box := row_head.get_theme_stylebox("panel")
 		assert_not_null(box, "the badge is painted with its own chip stylebox")
 		if box != null:
-			assert_eq(box.get("border_color"), ConquestTheme.element_color("nature"),
-					"framed in the ONE element palette, same hue a nature move's stripe uses")
+			assert_eq(box.get("border_color"), ConquestTheme.element_color("plant"),
+					"framed in the ONE element palette, same hue a plant move's stripe uses")
 
 	# THE COLUMN header is deliberately capped to the cell width, so that a long
 	# authored element id cannot widen all N columns and blow the 720p budget. It must
 	# still be drawn at everything it claims -- the failure being guarded against is a
 	# chip laid out at 1px, not one that trims a long name on purpose.
 	var col_head := grid.get_node_or_null(
-			ElementChartGallery.COL_HEADER_PREFIX + "nature") as PanelContainer
-	assert_not_null(col_head, "the nature COLUMN is headed by an element badge too")
+			ElementChartGallery.COL_HEADER_PREFIX + "plant") as PanelContainer
+	assert_not_null(col_head, "the plant COLUMN is headed by an element badge too")
 	if col_head != null:
 		var label := col_head.get_node_or_null(ElementVisuals.BADGE_LABEL_NAME) as Label
 		assert_not_null(label, "the column badge carries a label")
 		if label != null:
 			var needed: float = _text_width(label)
 			var claimed: float = minf(needed, ElementChartGallery.COL_BADGE_CAP)
-			gut.p("col header 'nature'  drawn %.1fpx  needs %.1fpx  cap %.1fpx"
+			gut.p("col header 'plant'  drawn %.1fpx  needs %.1fpx  cap %.1fpx"
 					% [label.size.x, needed, ElementChartGallery.COL_BADGE_CAP])
 			assert_true(label.size.x >= claimed - 1.0,
 					"drawn at its claimed width (%.1f >= %.1f), never collapsed to a dot"
@@ -273,16 +273,16 @@ func test_a_strong_cell_shows_its_multiplier_in_the_buff_colour() -> void:
 		assert_not_null(grid, "the page draws a type chart grid")
 		return
 
-	var cell := grid.get_node_or_null("%sfire_nature"
+	var cell := grid.get_node_or_null("%sfire_plant"
 			% ElementChartGallery.CELL_PREFIX) as Label
-	assert_not_null(cell, "fire attacking nature has its own cell")
+	assert_not_null(cell, "fire attacking plant has its own cell")
 	if cell == null:
 		return
 
 	assert_eq(cell.text, "×1.25", "which prints the multiplier the chart authors")
 	assert_eq(cell.get_theme_color("font_color"), MoveStatVisuals.BUFF_COLOR,
 			"in the buff green -- the same 'better for me' colour the HUD uses")
-	_assert_reads(cell, "the fire->nature cell")
+	_assert_reads(cell, "the fire->plant cell")
 
 	var box := cell.get_theme_stylebox("normal") as StyleBoxFlat
 	assert_not_null(box, "a decided cell is tinted so it pops out of the matrix")
@@ -317,8 +317,8 @@ func test_a_neutral_cell_is_drawn_blank() -> void:
 		assert_not_null(grid, "the page draws a type chart grid")
 		return
 
-	var cell := grid.get_node_or_null("%sfire_holy" % ElementChartGallery.CELL_PREFIX) as Label
-	assert_not_null(cell, "fire against holy is an unauthored pairing, and still has a cell")
+	var cell := grid.get_node_or_null("%sfire_radiant" % ElementChartGallery.CELL_PREFIX) as Label
+	assert_not_null(cell, "fire against radiant is an unauthored pairing, and still has a cell")
 	if cell == null:
 		return
 	assert_eq(cell.text, "",
@@ -369,25 +369,29 @@ func test_a_paired_element_reads_both_directions() -> void:
 	if strong == null or weak == null:
 		return
 
-	var badge_name: String = ElementChartGallery.BADGE_PREFIX + "nature"
+	var badge_name: String = ElementChartGallery.BADGE_PREFIX + "plant"
 	assert_not_null(strong.get_node_or_null(badge_name),
 			"fire burns wood, badged rather than spelled out")
-	assert_not_null(weak.get_node_or_null(badge_name),
-			"and green chokes out flame")
+	assert_not_null(weak.get_node_or_null(ElementChartGallery.BADGE_PREFIX + "water"),
+			"and water douses flame")
 
 	var chip := strong.get_node_or_null(badge_name) as PanelContainer
 	if chip != null:
 		_assert_reads(chip.get_node_or_null(ElementVisuals.BADGE_LABEL_NAME) as Label,
-				"the nature badge on fire's card")
+				"the plant badge on fire's card")
 
 	assert_null(card.find_child(ElementChartGallery.CARD_NO_MATCHUPS, true, false),
 			"a paired element never shows the no-matchups line")
 
 
 func test_the_unpaired_element_says_it_has_no_matchups_yet() -> void:
-	# Wind ships with NO opposite, deliberately: nothing in the game carries it yet, so
-	# pairing it would be inventing balance for content that does not exist. The page
-	# has to say that -- filling the gap here is how a reference screen starts lying.
+	# An element with NO matchup but its self-resist (wind, in this injected chart -- every
+	# shipped type has matchups since the 15-type chart). The page has to say so rather
+	# than invent one: filling the gap here is how a reference screen starts lying.
+	var custom := ElementChartResource.new()
+	custom.elements = [&"fire", &"plant", &"wind"] as Array[StringName]
+	custom.matrix = {&"fire": {&"plant": 1.25}, &"plant": {&"fire": 1.25}, &"wind": {&"wind": 0.75}}
+	ElementChart.set_chart(custom)
 	var screen: Compendium = await _open_compendium()
 	var gallery: ElementChartGallery = _gallery_in(screen)
 	var cards: VBoxContainer = _cards_in(gallery)
@@ -484,9 +488,11 @@ func test_the_page_fits_the_720p_viewport() -> void:
 	if grid != null:
 		gut.p("grid %.0fx%.0f in a %.0fx%.0f region"
 				% [grid.size.x, grid.size.y, chart_scroll.size.x, chart_scroll.size.y])
-		assert_true(grid.size.x <= chart_scroll.size.x + 1.0,
-				"and at the shipped element count the whole grid is visible without "
-				+ "scrolling sideways (%.0f <= %.0f)" % [grid.size.x, chart_scroll.size.x])
+		# Fifteen types (owner, 2026-10-12) make the grid wider than its region: it scrolls
+		# sideways rather than squeezing the cells below a readable badge width.
+		if grid.size.x > chart_scroll.size.x + 1.0:
+			assert_ne(chart_scroll.horizontal_scroll_mode, ScrollContainer.SCROLL_MODE_DISABLED,
+					"a grid wider than its region (%.0f > %.0f) scrolls sideways" % [grid.size.x, chart_scroll.size.x])
 
 	var cards: VBoxContainer = _cards_in(gallery)
 	if cards != null:

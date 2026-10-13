@@ -10,7 +10,7 @@ func test_request_round_trip_through_json() -> void:
 	r.encounter_id = "mossway.grass.petalfang"
 	r.source = BattleRequest.SOURCE_WILD
 	r.seed = 123456
-	r.party = [{"member_id": "vineweave", "character_id": "vineweave", "current_hp": 40, "item_id": "", "growth": {}}]
+	r.party = [{"member_id": "seedant", "character_id": "vineweave", "current_hp": 40, "item_id": "", "growth": {}}]
 	r.opponent = {"name": "Wild Petalfang", "speaker_id": "petalfang", "portrait": "petalfang",
 		"team": [{"character_id": "petalfang", "strength": 1.0}]}
 	r.rules = {"can_flee": true, "can_befriend": true, "defeat_policy": "whiteout", "story_critical": false}
@@ -38,7 +38,7 @@ func test_request_decode_is_strict() -> void:
 
 func test_result_round_trip() -> void:
 	var res := BattleResult.make("trainer.mossway.bram", BattleResult.OUTCOME_VICTORY)
-	res.party_after = [{"member_id": "vineweave", "current_hp": 12, "wounded": false}]
+	res.party_after = [{"member_id": "seedant", "current_hp": 12, "wounded": false}]
 	res.defeated = ["tree_grunt", "petalfang"]
 	res.befriend_offer = {"character_id": "petalfang", "accepted": false}
 	res.turns = 7

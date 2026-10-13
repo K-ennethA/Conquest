@@ -18,6 +18,7 @@
 script = ExtResource("1_char")
 character_id = &"gem_knight"
 element = &"earth"
+element2 = &"electric"
 display_name = "Geode"
 description = "A knight hewn from living crystal, patient as stone. It takes the field already sheathed in its own ward, and does not so much block a blow as remember it -- every strike it endures is stored in its facets and returned, sharpened, to the one who dealt it."
 model_scene = ExtResource("2_model")

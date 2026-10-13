@@ -322,6 +322,8 @@ func test_every_destination_is_reachable_from_every_entry() -> void:
 	var cut_by_terrain: Dictionary = {}
 	for a in _areas():
 		var g := OverworldGrid.build(a, stages[0])
+		# A TRAVEL field move's tiles are a way round (the sea move: Beach Village's islet, DECISIONS.md #43).
+		g.riding_tiles = _ride_tiles()
 		var entries: Dictionary = {}
 		for eid in a.entry_ids():
 			entries[eid] = a.entry(eid)["cell"]
@@ -384,6 +386,9 @@ func test_no_solid_prop_sits_on_an_entry_an_exit_or_an_actor() -> void:
 					var front: Vector3i = (e as DoorEntity).front_cell()
 					if solid.has(front):
 						problems["%s: door '%s' opens onto prop %s at %s" % [a.area_id, e.id, solid[front], front]] = true
+					continue
+				# A sleeper LYING in bed lies on its bed (Frostpeak, DECISIONS.md #95).
+				if e is NpcEntity and (e as NpcEntity).sleep_pose == "lie" and (e as NpcEntity).is_asleep(s):
 					continue
 				for c in e.cells():
 					# A warp over a wall (a map-edge cell) is never walked; only walkable cells count.
@@ -564,3 +569,13 @@ func test_props_never_wall_off_open_ground() -> void:
 	var keys: Array = problems.keys()
 	keys.sort()
 	assert_eq(keys.size(), 0, "props wall off open ground:\n  " + "\n  ".join(PackedStringArray(keys)))
+
+
+## Every shipped TRAVEL field move's tiles.
+func _ride_tiles() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for fm in FieldMoveResource.travel_moves():
+		for t in fm.travel_tiles:
+			if not out.has(t):
+				out.append(t)
+	return out

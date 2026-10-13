@@ -14,6 +14,7 @@ script = ExtResource("4_ts0ok")
 
 [resource]
 script = ExtResource("3_nrwgm")
+element = &"basic"
 move_id = &"cleave"
 display_name = "Cleave"
 description = "Heavy physical damage to one adjacent enemy."

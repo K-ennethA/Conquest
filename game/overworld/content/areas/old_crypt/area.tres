@@ -1,0 +1,152 @@
+[gd_resource type="Resource" script_class="OverworldAreaResource" format=3]
+
+[ext_resource type="Script" path="res://game/overworld/data/EncounterZone.gd" id="1_4mmfo"]
+[ext_resource type="Script" path="res://game/overworld/data/EncounterEntry.gd" id="2_o2d8h"]
+[ext_resource type="Script" path="res://game/overworld/data/PropEntity.gd" id="3_mavjf"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/StartDuelCommand.gd" id="4_t68ve"]
+[ext_resource type="Script" path="res://game/overworld/data/BattleSpec.gd" id="5_ugosp"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceOption.gd" id="6_qkqok"]
+[ext_resource type="Script" path="res://game/ui/story/StoryBeat.gd" id="7_c2p7n"]
+[ext_resource type="Script" path="res://game/overworld/script/commands/ChoiceCommand.gd" id="8_0a74f"]
+[ext_resource type="Script" path="res://game/overworld/data/NpcEntity.gd" id="9_2hix3"]
+[ext_resource type="Script" path="res://game/overworld/data/WarpEntity.gd" id="10_ggxq7"]
+[ext_resource type="Script" path="res://game/overworld/data/OverworldAreaResource.gd" id="11_pmvev"]
+[ext_resource type="Resource" path="res://game/overworld/content/areas/old_crypt/terrain.tres" id="12_glwfm"]
+
+[sub_resource type="Resource" id="Resource_o71s8"]
+script = ExtResource("2_o2d8h")
+character_id = &"monster"
+weight = 2.0
+
+[sub_resource type="Resource" id="Resource_gv1oj"]
+script = ExtResource("2_o2d8h")
+character_id = &"blightcap"
+
+[sub_resource type="Resource" id="Resource_4n53p"]
+script = ExtResource("1_4mmfo")
+tile_ids = Array[StringName]([&"ash_field"])
+table = Array[Resource]([SubResource("Resource_o71s8"), SubResource("Resource_gv1oj")])
+rate = 0.12
+
+[sub_resource type="Resource" id="Resource_g6ert"]
+script = ExtResource("3_mavjf")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 2.5
+id = &"crypt_lamp_5_15"
+cell = Vector3i(5, 15, 0)
+tint = Color(0.6, 0.86, 0.7, 1)
+
+[sub_resource type="Resource" id="Resource_8fdyr"]
+script = ExtResource("3_mavjf")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 2.5
+id = &"crypt_lamp_13_15"
+cell = Vector3i(13, 15, 0)
+tint = Color(0.6, 0.86, 0.7, 1)
+
+[sub_resource type="Resource" id="Resource_joest"]
+script = ExtResource("3_mavjf")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 2.5
+id = &"crypt_lamp_2_3"
+cell = Vector3i(2, 3, 0)
+tint = Color(0.6, 0.86, 0.7, 1)
+
+[sub_resource type="Resource" id="Resource_ugtdp"]
+script = ExtResource("3_mavjf")
+prop = "lamp"
+footprint = Vector2i(1, 1)
+glow = 2.5
+id = &"crypt_lamp_14_3"
+cell = Vector3i(14, 3, 0)
+tint = Color(0.6, 0.86, 0.7, 1)
+
+[sub_resource type="Resource" id="Resource_8bewc"]
+script = ExtResource("5_ugosp")
+kind = 1
+encounter_id = "crypt.warden.1"
+opponent_name = "Duskmaw"
+opponent_speaker_id = &"npc_crypt_warden_1"
+opponent_team = Array[Dictionary]([{
+"character_id": "monster",
+"strength": 1.25
+}])
+reward_flags = Array[String](["postgame.crypt_mini_boss_1"])
+clash_intro = true
+enemy_level = 39
+boss_battle = true
+
+[sub_resource type="Resource" id="Resource_famxn"]
+script = ExtResource("4_t68ve")
+spec = SubResource("Resource_8bewc")
+
+[sub_resource type="Resource" id="Resource_m6enh"]
+script = ExtResource("6_qkqok")
+label = "Fight"
+commands = Array[Resource]([SubResource("Resource_famxn")])
+
+[sub_resource type="Resource" id="Resource_bun8p"]
+script = ExtResource("6_qkqok")
+label = "Not yet"
+is_cancel = true
+
+[sub_resource type="Resource" id="Resource_0ub45"]
+script = ExtResource("7_c2p7n")
+text = "Something huge stirs in the doorway, barring the way deeper. Fight?"
+clear_portraits = true
+
+[sub_resource type="Resource" id="Resource_26ylo"]
+script = ExtResource("8_0a74f")
+prompt = SubResource("Resource_0ub45")
+options = Array[Resource]([SubResource("Resource_m6enh"), SubResource("Resource_bun8p")])
+
+[sub_resource type="Resource" id="Resource_1f3g7"]
+script = ExtResource("9_2hix3")
+speaker_name = "Duskmaw"
+id = &"crypt_warden_1"
+cell = Vector3i(9, 2, 0)
+display_name = "Duskmaw"
+visual_character = &"monster"
+visible_if = "not has(\"postgame.crypt_mini_boss_1\")"
+on_interact = Array[Resource]([SubResource("Resource_26ylo")])
+
+[sub_resource type="Resource" id="Resource_u60ix"]
+script = ExtResource("10_ggxq7")
+area_rect = Rect2i(9, 17, 1, 1)
+target_area = &"crownhaven_graveyard"
+target_entry = &"tomb"
+id = &"stairs_up"
+blocking = false
+
+[sub_resource type="Resource" id="Resource_wma18"]
+script = ExtResource("10_ggxq7")
+area_rect = Rect2i(9, 0, 1, 1)
+target_area = &"old_crypt_depths"
+target_entry = &"south"
+id = &"north_exit"
+blocking = false
+
+[resource]
+script = ExtResource("11_pmvev")
+area_id = &"old_crypt"
+display_name = "The Old Crypt"
+terrain = ExtResource("12_glwfm")
+kind = 3
+region_id = &"heartlands"
+world_map_pos = Vector2(0.448, 0.352)
+entry_points = {
+"north": {
+"cell": [9, 1, 0],
+"facing": "south"
+},
+"stairs": {
+"cell": [9, 16, 0],
+"facing": "north"
+}
+}
+entities = Array[Resource]([SubResource("Resource_g6ert"), SubResource("Resource_8fdyr"), SubResource("Resource_joest"), SubResource("Resource_ugtdp"), SubResource("Resource_1f3g7"), SubResource("Resource_u60ix"), SubResource("Resource_wma18")])
+encounter_zones = Array[Resource]([SubResource("Resource_4n53p")])
+level_band = Vector2i(30, 40)

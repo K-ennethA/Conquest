@@ -15,6 +15,7 @@ max_range = 4
 
 [resource]
 script = ExtResource("3_okp6j")
+element = &"basic"
 move_id = &"piercing_shot"
 display_name = "Piercing Shot"
 description = "Physical damage at range; cannot hit adjacent enemies."

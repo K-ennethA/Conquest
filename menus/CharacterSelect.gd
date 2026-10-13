@@ -960,10 +960,23 @@ static func pickable_ids(all_ids: Array, unlocked: Array, hide_locked: bool) -> 
 		var id_str := String(chr.character_id)
 		if id_str in EXCLUDED_IDS:
 			continue
-		if hide_locked and EvolutionLibrary.is_evolved_form(id_str) and not (id_str in unlocked):
+		if hide_locked and EvolutionLibrary.is_evolved_form(id_str) and not (id_str in unlocked) \
+				and _root_is_pickable(id_str):
 			continue
 		out.append(id_str)
 	return out
+
+
+## True when the first form of [param id]'s line can itself be picked (not excluded, not a boss).
+## A locked evolved form hides only behind a base the player can actually field and evolve; when
+## the base is excluded (a placeholder like Seedant), the evolved form (Vineweave) stands in as the
+## line's pickable entry instead of vanishing from the open modes.
+static func _root_is_pickable(id: String) -> bool:
+	var root := String(EvolutionLibrary.line_root(id))
+	if root.is_empty() or root == id or root in EXCLUDED_IDS:
+		return false
+	var chr: CharacterResource = CharacterLibrary.get_character(StringName(root))
+	return chr != null and not chr.is_boss
 
 
 ## EVOLVE was pressed in the detail pane: play the Evolution screen over this one, and on a

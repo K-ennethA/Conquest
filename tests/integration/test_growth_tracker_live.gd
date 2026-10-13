@@ -1,8 +1,8 @@
 extends GutTest
 
 ## [GrowthTracker] on REAL units (EVOLUTION.md task 1.4): character-backed Units owned by real
-## [Player]s fight a tiny battle -- the human squad is Barkling + Vineweave, the enemy one
-## Blightcap. Vineweave and the Blightcap fall, the human side wins, and only the SURVIVOR's
+## [Player]s fight a tiny battle -- the human squad is Barkling + Petalfang, the enemy one
+## Blightcap. Petalfang and the Blightcap fall, the human side wins, and only the SURVIVOR's
 ## ledger member grows. Then the gates: a replay, a networked match and a non-growth mode
 ## award nothing.
 ##
@@ -11,12 +11,15 @@ extends GutTest
 ## as it does in a live battle. The players are handed in through the tracker's test seam
 ## rather than PlayerManager's global list, so no autoload state is touched.
 ##
-## Ledger + inventory are redirected to temp files (tests/README.md rule 4).
+## Ledger + inventory are redirected to temp files (tests/README.md rule 4). Barkling's Growth
+## goal comes from the test-only Barkling -> Mycothrall edge (tests/helpers/evolution_fixture.gd);
+## Petalfang is in no line, so it is its own ledger member.
 
 const CHARACTER_UNIT_SCENE: PackedScene = preload("res://game/characters/CharacterUnit.tscn")
 const LEDGER_PATH := "user://test_evo_growth_live.json"
 const ITEMS_PATH := "user://test_evo_growth_live_items.json"
 const Guard := preload("res://tests/helpers/global_state_guard.gd")
+const EvoFixture := preload("res://tests/helpers/evolution_fixture.gd")
 
 ## Untyped on purpose (see tests/README.md rule 3).
 var _guard
@@ -37,13 +40,14 @@ func before_each() -> void:
 	_guard.set_setting("game_mode", GameSettings.GameMode.SINGLE_PLAYER)
 	RosterLedger.reset()
 	ItemInventory.reset()
+	EvoFixture.install()
 	GrowthTracker.begin_battle_log()
 	_human = Player.new(0, "You")
 	_enemy = Player.new(1, "Grove")
 	_enemy.is_ai = true
 	_tracker = GrowthTracker.new()
 	_tracker.players_override = [_human, _enemy]
-	_tracker.squad_override = ["tree_grunt", "vineweave"]
+	_tracker.squad_override = ["tree_grunt", "petalfang"]
 	add_child_autofree(_tracker)
 	_tracker.setup()
 
@@ -55,6 +59,7 @@ func after_each() -> void:
 	GrowthTracker.begin_battle_log()
 	RosterLedger.reset()
 	ItemInventory.reset()
+	EvoFixture.uninstall()
 
 
 func after_all() -> void:
@@ -82,7 +87,7 @@ func _kill(unit: Unit) -> void:
 
 func _fight_a_small_battle() -> void:
 	_spawn("tree_grunt", _human)
-	var vine := _spawn("vineweave", _human)
+	var vine := _spawn("petalfang", _human)
 	var foe := _spawn("blightcap", _enemy)
 	_tracker.roll_call()  # the turn-start sweep, run by hand
 	await _kill(vine)
@@ -93,14 +98,14 @@ func test_a_won_battle_grows_the_survivor_only() -> void:
 	_tracker.context_override = { "mode": "skirmish" }
 	await _fight_a_small_battle()
 	assert_eq(RosterLedger.growth_of("tree_grunt"), 1, "Barkling fought and survived a win: +1 Growth")
-	assert_eq(RosterLedger.growth_of("vineweave"), 0, "Vineweave fell: no Growth")
+	assert_eq(RosterLedger.growth_of("petalfang"), 0, "Petalfang fell: no Growth")
 	assert_eq(int(RosterLedger.feats_of("tree_grunt")["wins"]), 1, "the win is a battle feat (EVOLUTION.md 3.2a)")
-	assert_eq(int(RosterLedger.feats_of("vineweave")["wins"]), 1, "a fallen unit still fought in the win")
+	assert_eq(int(RosterLedger.feats_of("petalfang")["wins"]), 1, "a fallen unit still fought in the win")
 	var rows := GrowthTracker.growth_this_battle()
 	assert_eq(rows.size(), 1, "the end screen gets exactly one growth row")
 	assert_eq(String(rows[0]["uid"]), "tree_grunt", "for Barkling")
 	assert_eq(int(rows[0]["gained"]), 1, "who gained one")
-	assert_eq(int(rows[0]["goal"]), RosterLedger.next_growth_goal("tree_grunt"), "towards Oakheart's goal")
+	assert_eq(int(rows[0]["goal"]), RosterLedger.next_growth_goal("tree_grunt"), "towards Mycothrall's goal")
 	assert_true(FileAccess.file_exists(LEDGER_PATH), "the ledger was saved")
 
 

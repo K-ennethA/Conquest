@@ -1,0 +1,52 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" uid="uid://go2opykivdsx" path="res://tile_objects/tiles/tile.gd" id="1_tile"]
+[ext_resource type="Resource" path="res://game/tiles/resources/badlands/red_clay.tres" id="2_res"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_base"]
+size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pebble"]
+size = Vector3(0.16, 0.08, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slab"]
+albedo_color = Color(0.66, 0.36, 0.22, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pebble"]
+albedo_color = Color(0.5, 0.3, 0.22, 1)
+roughness = 0.9
+
+[node name="RedClayTile" type="Node3D"]
+script = ExtResource("1_tile")
+tile_resource = ExtResource("2_res")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_base")
+material_override = SubResource("StandardMaterial3D_slab")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+shape = SubResource("BoxShape3D_base")
+
+[node name="ClayVisual" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+
+[node name="Pebble1" type="MeshInstance3D" parent="ClayVisual"]
+transform = Transform3D(0.866, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866, -0.5, 0.04, -0.4)
+mesh = SubResource("BoxMesh_pebble")
+material_override = SubResource("StandardMaterial3D_pebble")
+
+[node name="Pebble2" type="MeshInstance3D" parent="ClayVisual"]
+transform = Transform3D(0.7071, 0, -0.7071, 0, 1, 0, 0.7071, 0, 0.7071, 0.45, 0.04, 0.2)
+mesh = SubResource("BoxMesh_pebble")
+material_override = SubResource("StandardMaterial3D_pebble")
+
+[node name="Pebble3" type="MeshInstance3D" parent="ClayVisual"]
+transform = Transform3D(1.4, 0, 0, 0, 1, 0, 0, 0, 1.2, -0.1, 0.04, 0.62)
+mesh = SubResource("BoxMesh_pebble")
+material_override = SubResource("StandardMaterial3D_pebble")
